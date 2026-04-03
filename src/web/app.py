@@ -338,9 +338,9 @@ def _reportlab_pdf_from_html(html_content: str) -> str:
 
     story = []
 
-    # Strip HTML tags for simple text extraction
-    text = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL)
-    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL)
+    # Strip HTML tags for simple text extraction (case-insensitive for safety)
+    text = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
 
     # Extract sections
     sections = re.split(r'<(?:h[12]|section)[^>]*>', text)
@@ -360,8 +360,8 @@ def _reportlab_pdf_from_html(html_content: str) -> str:
                     if para:
                         try:
                             story.append(Paragraph(para, body_style))
-                        except Exception:
-                            # If reportlab can't parse it, add as plain text
+                        except (ValueError, AttributeError):
+                            # If reportlab can't parse the markup, sanitize and retry
                             story.append(Paragraph(re.sub(r'[<>&]', '', para), body_style))
                         story.append(Spacer(1, 2))
 
@@ -374,7 +374,10 @@ def _reportlab_pdf_from_html(html_content: str) -> str:
 
 
 def _get_filename(action: str, job_url: Optional[str] = None) -> str:
-    """Generate a filename for the document."""
+    """Generate a filename for the document.
+
+    Note: MD5 is used only for filename uniqueness, not for cryptographic security.
+    """
     if action == "resume":
         return "resume_base.pdf"
     elif action == "resume_tailored":
