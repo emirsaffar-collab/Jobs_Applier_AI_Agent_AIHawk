@@ -309,6 +309,7 @@ _HTML = """\
         .status-msg.show { display: block; }
         .status-msg.success { background: #dcfce7; color: var(--success); border: 1px solid #bbf7d0; }
         .status-msg.error { background: #fee2e2; color: var(--danger); border: 1px solid #fecaca; }
+        .status-msg.info { background: var(--primary-light); color: var(--primary-dark); border: 1px solid #93c5fd; }
 
         .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
         @media (max-width: 768px) { .settings-grid { grid-template-columns: 1fr; } }
@@ -827,7 +828,7 @@ interests:
         /* ========== LOAD EXAMPLE ========== */
         function loadExample() {
             document.getElementById('resumeYaml').value = exampleYaml;
-            showStatusMsg('resumeStatus', 'success', 'Example resume loaded.');
+            showStatusMsg('resumeStatus', 'info', 'Example template loaded (not saved to server).');
         }
 
         /* ========== ALERTS ========== */

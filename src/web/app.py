@@ -164,7 +164,7 @@ def _validate_work_preferences(data: dict) -> list[str]:
         errors.append("experience_level must be a dict")
     else:
         for level in ["internship", "entry", "associate", "mid_senior_level", "director", "executive"]:
-            if not isinstance(exp.get(level), bool):
+            if level in exp and not isinstance(exp[level], bool):
                 errors.append(f"Experience level '{level}' must be a boolean")
 
     # Validate job types are booleans
@@ -173,7 +173,7 @@ def _validate_work_preferences(data: dict) -> list[str]:
         errors.append("job_types must be a dict")
     else:
         for job_type in ["full_time", "contract", "part_time", "temporary", "internship", "other", "volunteer"]:
-            if not isinstance(jt.get(job_type), bool):
+            if job_type in jt and not isinstance(jt[job_type], bool):
                 errors.append(f"Job type '{job_type}' must be a boolean")
 
     # Validate date filters are booleans
@@ -182,7 +182,7 @@ def _validate_work_preferences(data: dict) -> list[str]:
         errors.append("date must be a dict")
     else:
         for df in ["all_time", "month", "week", "24_hours"]:
-            if not isinstance(date.get(df), bool):
+            if df in date and not isinstance(date[df], bool):
                 errors.append(f"Date filter '{df}' must be a boolean")
 
     # Validate positions and locations are lists of strings
