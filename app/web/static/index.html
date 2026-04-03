@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AIHawk Jobs Applier</title>
+  <style>
+    /* ------------------------------------------------------------------ */
+    /* Reset & base                                                         */
+    /* ------------------------------------------------------------------ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f1117;
+      --surface:   #1a1d27;
+      --border:    #2e3147;
+      --accent:    #6c63ff;
+      --accent-h:  #8b85ff;
+      --success:   #22c55e;
+      --warning:   #f59e0b;
+      --error:     #ef4444;
+      --text:      #e2e8f0;
+      --muted:     #94a3b8;
+      --radius:    10px;
+      --shadow:    0 4px 24px rgba(0,0,0,.4);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Layout                                                               */
+    /* ------------------------------------------------------------------ */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    header h1 { font-size: 1.4rem; font-weight: 700; }
+    header .badge {
+      font-size: .7rem;
+      background: var(--accent);
+      color: #fff;
+      padding: .2rem .5rem;
+      border-radius: 999px;
+    }
+    #status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      margin-left: auto;
+      transition: background .3s;
+    }
+    #status-dot.ready   { background: var(--success); }
+    #status-dot.partial { background: var(--warning); }
+    #status-dot.error   { background: var(--error); }
+
+    main {
+      flex: 1;
+      max-width: 900px;
+      width: 100%;
+      margin: 2rem auto;
+      padding: 0 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Cards                                                                */
+    /* ------------------------------------------------------------------ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+    }
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 1rem;
+      color: var(--accent-h);
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Form elements                                                        */
+    /* ------------------------------------------------------------------ */
+    label { display: block; font-size: .85rem; color: var(--muted); margin-bottom: .3rem; }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="url"],
+    select,
+    textarea {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: .55rem .75rem;
+      font-size: .9rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus, select:focus, textarea:focus { border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 120px; font-family: monospace; font-size: .8rem; }
+
+    .form-row { margin-bottom: 1rem; }
+
+    /* ------------------------------------------------------------------ */
+    /* Buttons                                                              */
+    /* ------------------------------------------------------------------ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      padding: .55rem 1.2rem;
+      border: none;
+      border-radius: 6px;
+      font-size: .9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn-primary  { background: var(--accent);  color: #fff; }
+    .btn-primary:hover:not(:disabled)  { background: var(--accent-h); }
+    .btn-success  { background: var(--success); color: #fff; }
+    .btn-success:hover:not(:disabled)  { opacity: .85; }
+    .btn-ghost    { background: transparent; border: 1px solid var(--border); color: var(--text); }
+    .btn-ghost:hover:not(:disabled)    { border-color: var(--accent); color: var(--accent-h); }
+    .btn-sm { padding: .35rem .8rem; font-size: .8rem; }
+
+    .btn-row { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: .75rem; }
+
+    /* ------------------------------------------------------------------ */
+    /* Progress bar                                                         */
+    /* ------------------------------------------------------------------ */
+    .progress-wrap {
+      background: var(--bg);
+      border-radius: 999px;
+      height: 8px;
+      overflow: hidden;
+      margin-top: .5rem;
+    }
+    .progress-bar {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width .4s ease;
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Alerts / toasts                                                      */
+    /* ------------------------------------------------------------------ */
+    #toast-container {
+      position: fixed;
+      bottom: 1.5rem;
+      right: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: .5rem;
+      z-index: 9999;
+    }
+    .toast {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .75rem 1rem;
+      font-size: .85rem;
+      max-width: 320px;
+      box-shadow: var(--shadow);
+      animation: slideIn .25s ease;
+    }
+    .toast.success { border-left: 4px solid var(--success); }
+    .toast.error   { border-left: 4px solid var(--error); }
+    .toast.info    { border-left: 4px solid var(--accent); }
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateX(20px); }
+      to   { opacity: 1; transform: translateX(0); }
+    }
+
+    /* ------------------------------------------------------------------ */
+    /* Document history table                                               */
+    /* ------------------------------------------------------------------ */
+    .doc-table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+    .doc-table th {
+      text-align: left;
+      padding: .5rem .75rem;
+      color: var(--muted);
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+    }
+    .doc-table td {
+      padding: .5rem .75rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: middle;
+    }
+    .doc-table tr:last-child td { border-bottom: none; }
+    .doc-table tr:hover td { background: rgba(108,99,255,.06); }
+
+    .badge-type {
+      font-size: .7rem;
+      padding: .15rem .45rem;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+    .badge-resume          { background: #1e3a5f; color: #60a5fa; }
+    .badge-tailored_resume { background: #1e3a2f; color: #4ade80; }
+    .badge-cover_letter    { background: #3a1e3a; color: #c084fc; }
+
+    /* ------------------------------------------------------------------ */
+    /* Task status panel                                                    */
+    /* ------------------------------------------------------------------ */
+    #task-panel {
+      display: none;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+    #task-panel.visible { display: block; }
+    #task-status-label { font-size: .85rem; color: var(--muted); margin-bottom: .4rem; }
+    #task-status-text  { font-weight: 600; }
+
+    /* ------------------------------------------------------------------ */
+    /* Misc                                                                 */
+    /* ------------------------------------------------------------------ */
+    .empty-state {
+      text-align: center;
+      color: var(--muted);
+      padding: 2rem 0;
+      font-size: .9rem;
+    }
+    .divider { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+    footer {
+      text-align: center;
+      padding: 1rem;
+      font-size: .75rem;
+      color: var(--muted);
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<!-- -------------------------------------------------------------------- -->
+<!-- Header                                                                 -->
+<!-- -------------------------------------------------------------------- -->
+<header>
+  <h1>🦅 AIHawk Jobs Applier</h1>
+  <span class="badge">v2.0</span>
+  <div id="status-dot" title="Setup status"></div>
+</header>
+
+<!-- -------------------------------------------------------------------- -->
+<!-- Main                                                                   -->
+<!-- -------------------------------------------------------------------- -->
+<main>
+
+  <!-- Setup card -->
+  <div class="card" id="card-setup">
+    <h2>⚙️ Setup</h2>
+    <div class="form-row">
+      <label for="api-key">LLM API Key</label>
+      <input type="password" id="api-key" placeholder="sk-…" autocomplete="off" />
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="doSetup()">Save API Key</button>
+      <button class="btn btn-ghost btn-sm" onclick="checkStatus()">Check Status</button>
+    </div>
+    <div id="setup-status" style="margin-top:.75rem;font-size:.85rem;color:var(--muted)"></div>
+  </div>
+
+  <!-- Resume card -->
+  <div class="card" id="card-resume">
+    <h2>📄 Resume</h2>
+    <div class="form-row">
+      <label for="resume-file">Upload plain-text YAML resume</label>
+      <input type="file" id="resume-file" accept=".yaml,.yml,.txt"
+             style="color:var(--text);background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:.5rem;width:100%;" />
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="uploadResume()">Upload Resume</button>
+      <button class="btn btn-ghost btn-sm" onclick="downloadResume()">⬇ Download Current</button>
+    </div>
+  </div>
+
+  <!-- Generate card -->
+  <div class="card" id="card-generate">
+    <h2>🚀 Generate Document</h2>
+    <div class="form-row">
+      <label for="doc-type">Document type</label>
+      <select id="doc-type" onchange="onDocTypeChange()">
+        <option value="resume">Base Resume</option>
+        <option value="tailored_resume">Tailored Resume</option>
+        <option value="cover_letter">Cover Letter</option>
+      </select>
+    </div>
+    <div class="form-row" id="job-url-row" style="display:none">
+      <label for="job-url">Job posting URL</label>
+      <input type="url" id="job-url" placeholder="https://example.com/jobs/123" />
+    </div>
+    <div class="form-row">
+      <label for="style-select">CSS Style</label>
+      <select id="style-select">
+        <option value="">Loading styles…</option>
+      </select>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-generate" onclick="startGeneration()">Generate</button>
+    </div>
+
+    <!-- Task progress panel -->
+    <div id="task-panel">
+      <div id="task-status-label">
+        Status: <span id="task-status-text">—</span>
+      </div>
+      <div class="progress-wrap">
+        <div class="progress-bar" id="task-progress-bar" style="width:0%"></div>
+      </div>
+      <div id="task-error" style="color:var(--error);font-size:.8rem;margin-top:.5rem;display:none"></div>
+      <div id="task-download-row" class="btn-row" style="display:none">
+        <button class="btn btn-success btn-sm" id="btn-download-result" onclick="downloadResult()">
+          ⬇ Download PDF
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Document history card -->
+  <div class="card" id="card-history">
+    <h2>📁 Document History</h2>
+    <div id="doc-list-container">
+      <div class="empty-state">Loading…</div>
+    </div>
+    <div class="btn-row" style="margin-top:.5rem">
+      <button class="btn btn-ghost btn-sm" onclick="loadDocuments()">↻ Refresh</button>
+    </div>
+  </div>
+
+</main>
+
+<footer>AIHawk Jobs Applier &mdash; async document generation</footer>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- -------------------------------------------------------------------- -->
+<!-- JavaScript                                                             -->
+<!-- -------------------------------------------------------------------- -->
+<script>
+/* ======================================================================
+   State
+   ====================================================================== */
+let _apiKey = localStorage.getItem('aihawk_api_key') || '';
+let _currentTaskId = null;
+let _pollInterval = null;
+let _resultDocId = null;
+
+/* ======================================================================
+   Utilities
+   ====================================================================== */
+function apiKey() {
+  const el = document.getElementById('api-key');
+  if (el.value.trim()) {
+    _apiKey = el.value.trim();
+    localStorage.setItem('aihawk_api_key', _apiKey);
+  }
+  return _apiKey;
+}
+
+function headers() {
+  return { 'Content-Type': 'application/json', 'X-API-Key': apiKey() };
+}
+
+function headersNoBody() {
+  return { 'X-API-Key': apiKey() };
+}
+
+async function apiFetch(path, opts = {}) {
+  const res = await fetch('/api' + path, opts);
+  const ct = res.headers.get('content-type') || '';
+  if (ct.includes('application/json')) {
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+    return data;
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res;
+}
+
+function toast(msg, type = 'info', duration = 4000) {
+  const c = document.getElementById('toast-container');
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  c.appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+function setStatusDot(state) {
+  const d = document.getElementById('status-dot');
+  d.className = '';
+  if (state) d.classList.add(state);
+}
+
+/* ======================================================================
+   Initialisation
+   ====================================================================== */
+window.addEventListener('DOMContentLoaded', () => {
+  if (_apiKey) document.getElementById('api-key').value = _apiKey;
+  loadStyles();
+  checkStatus();
+  loadDocuments();
+  onDocTypeChange();
+});
+
+/* ======================================================================
+   Setup
+   ====================================================================== */
+async function doSetup() {
+  const key = apiKey();
+  if (!key) { toast('Please enter an API key.', 'error'); return; }
+  try {
+    const data = await apiFetch('/setup', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ api_key: key }),
+    });
+    toast(data.message || 'Setup complete.', 'success');
+    checkStatus();
+  } catch (e) {
+    toast('Setup failed: ' + e.message, 'error');
+  }
+}
+
+async function checkStatus() {
+  if (!apiKey()) { setStatusDot('error'); return; }
+  try {
+    const data = await apiFetch('/status', { headers: headersNoBody() });
+    const el = document.getElementById('setup-status');
+    el.innerHTML =
+      `API key: <b style="color:${data.has_api_key ? 'var(--success)' : 'var(--error)'}">${data.has_api_key ? '✓' : '✗'}</b> &nbsp;` +
+      `Resume: <b style="color:${data.has_resume ? 'var(--success)' : 'var(--error)'}">${data.has_resume ? '✓' : '✗'}</b> &nbsp;` +
+      `Preferences: <b style="color:${data.has_preferences ? 'var(--success)' : 'var(--muted)'}">${data.has_preferences ? '✓' : '—'}</b>`;
+    setStatusDot(data.ready ? 'ready' : (data.has_api_key ? 'partial' : 'error'));
+  } catch (e) {
+    setStatusDot('error');
+  }
+}
+
+/* ======================================================================
+   Resume
+   ====================================================================== */
+async function uploadResume() {
+  const file = document.getElementById('resume-file').files[0];
+  if (!file) { toast('Please select a YAML file.', 'error'); return; }
+  if (!apiKey()) { toast('Please enter your API key first.', 'error'); return; }
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const res = await fetch('/api/resume', {
+      method: 'POST',
+      headers: { 'X-API-Key': apiKey() },
+      body: form,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || `HTTP ${res.status}`);
+    toast('Resume uploaded successfully.', 'success');
+    checkStatus();
+  } catch (e) {
+    toast('Upload failed: ' + e.message, 'error');
+  }
+}
+
+async function downloadResume() {
+  if (!apiKey()) { toast('Please enter your API key first.', 'error'); return; }
+  try {
+    const res = await fetch('/api/resume/download', { headers: headersNoBody() });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
+    const blob = await res.blob();
+    _triggerDownload(blob, 'plain_text_resume.yaml');
+  } catch (e) {
+    toast('Download failed: ' + e.message, 'error');
+  }
+}
+
+/* ======================================================================
+   Styles
+   ====================================================================== */
+async function loadStyles() {
+  try {
+    const data = await apiFetch('/styles');
+    const sel = document.getElementById('style-select');
+    sel.innerHTML = '';
+    if (!data.styles || data.styles.length === 0) {
+      sel.innerHTML = '<option value="">No styles available</option>';
+      return;
+    }
+    data.styles.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s;
+      opt.textContent = s;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    document.getElementById('style-select').innerHTML = '<option value="">Could not load styles</option>';
+  }
+}
+
+/* ======================================================================
+   Document generation
+   ====================================================================== */
+function onDocTypeChange() {
+  const type = document.getElementById('doc-type').value;
+  const row = document.getElementById('job-url-row');
+  row.style.display = (type === 'tailored_resume' || type === 'cover_letter') ? 'block' : 'none';
+}
+
+async function startGeneration() {
+  if (!apiKey()) { toast('Please enter your API key first.', 'error'); return; }
+
+  const docType = document.getElementById('doc-type').value;
+  const jobUrl  = document.getElementById('job-url').value.trim();
+  const style   = document.getElementById('style-select').value || null;
+
+  if ((docType === 'tailored_resume' || docType === 'cover_letter') && !jobUrl) {
+    toast('Please enter a job posting URL.', 'error');
+    return;
+  }
+
+  // Reset task panel
+  _currentTaskId = null;
+  _resultDocId = null;
+  clearInterval(_pollInterval);
+  _setTaskPanel(false);
+
+  const btn = document.getElementById('btn-generate');
+  btn.disabled = true;
+
+  try {
+    const data = await apiFetch('/generate', {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ doc_type: docType, job_url: jobUrl || null, style }),
+    });
+    _currentTaskId = data.task_id;
+    toast('Generation started!', 'info');
+    _setTaskPanel(true);
+    _startPolling();
+  } catch (e) {
+    toast('Failed to start generation: ' + e.message, 'error');
+    btn.disabled = false;
+  }
+}
+
+function _setTaskPanel(visible) {
+  const panel = document.getElementById('task-panel');
+  panel.classList.toggle('visible', visible);
+  document.getElementById('task-progress-bar').style.width = '0%';
+  document.getElementById('task-status-text').textContent = '—';
+  document.getElementById('task-error').style.display = 'none';
+  document.getElementById('task-download-row').style.display = 'none';
+}
+
+function _startPolling() {
+  _pollInterval = setInterval(_pollTask, 2000);
+}
+
+async function _pollTask() {
+  if (!_currentTaskId) { clearInterval(_pollInterval); return; }
+  try {
+    const data = await apiFetch(`/tasks/${_currentTaskId}`, { headers: headersNoBody() });
+    _updateTaskPanel(data);
+
+    if (data.status === 'completed' || data.status === 'failed') {
+      clearInterval(_pollInterval);
+      document.getElementById('btn-generate').disabled = false;
+      if (data.status === 'completed') {
+        toast('Document generated successfully!', 'success');
+        loadDocuments();
+      } else {
+        toast('Generation failed: ' + (data.error || 'unknown error'), 'error');
+      }
+    }
+  } catch (e) {
+    // Silently ignore transient poll errors
+  }
+}
+
+function _updateTaskPanel(data) {
+  const statusEl = document.getElementById('task-status-text');
+  const bar      = document.getElementById('task-progress-bar');
+  const errEl    = document.getElementById('task-error');
+  const dlRow    = document.getElementById('task-download-row');
+
+  const statusColors = {
+    pending:   'var(--muted)',
+    running:   'var(--accent-h)',
+    retrying:  'var(--warning)',
+    completed: 'var(--success)',
+    failed:    'var(--error)',
+  };
+  statusEl.textContent = data.status;
+  statusEl.style.color = statusColors[data.status] || 'var(--text)';
+  bar.style.width = data.progress + '%';
+
+  if (data.status === 'failed' && data.error) {
+    errEl.textContent = data.error;
+    errEl.style.display = 'block';
+  }
+
+  if (data.status === 'completed' && data.document_id) {
+    _resultDocId = data.document_id;
+    dlRow.style.display = 'flex';
+  }
+}
+
+async function downloadResult() {
+  if (!_resultDocId) return;
+  await _downloadDocument(_resultDocId);
+}
+
+/* ======================================================================
+   Document history
+   ====================================================================== */
+async function loadDocuments() {
+  if (!apiKey()) return;
+  const container = document.getElementById('doc-list-container');
+  try {
+    const data = await apiFetch('/documents', { headers: headersNoBody() });
+    if (!data.documents || data.documents.length === 0) {
+      container.innerHTML = '<div class="empty-state">No documents generated yet.</div>';
+      return;
+    }
+    let html = `<table class="doc-table">
+      <thead><tr>
+        <th>#</th><th>Type</th><th>Filename</th><th>Created</th><th></th>
+      </tr></thead><tbody>`;
+    data.documents.forEach(doc => {
+      const date = new Date(doc.created_at).toLocaleString();
+      html += `<tr>
+        <td>${doc.id}</td>
+        <td><span class="badge-type badge-${doc.doc_type}">${doc.doc_type.replace('_', ' ')}</span></td>
+        <td>${doc.filename}</td>
+        <td>${date}</td>
+        <td><button class="btn btn-ghost btn-sm" onclick="_downloadDocument(${doc.id})">⬇</button></td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = `<div class="empty-state" style="color:var(--error)">Could not load documents: ${e.message}</div>`;
+  }
+}
+
+async function _downloadDocument(docId) {
+  try {
+    const res = await fetch(`/api/documents/${docId}/download`, { headers: headersNoBody() });
+    if (!res.ok) { const d = await res.json(); throw new Error(d.message); }
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^"]+)"?/);
+    const filename = match ? match[1] : `document_${docId}.pdf`;
+    const blob = await res.blob();
+    _triggerDownload(blob, filename);
+  } catch (e) {
+    toast('Download failed: ' + e.message, 'error');
+  }
+}
+
+function _triggerDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>
