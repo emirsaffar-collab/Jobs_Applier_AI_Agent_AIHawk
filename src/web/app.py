@@ -44,6 +44,169 @@ class JobStatus(BaseModel):
     error: Optional[str] = None
 
 
+class ExperienceLevelModel(BaseModel):
+    internship: bool = False
+    entry: bool = True
+    associate: bool = True
+    mid_senior_level: bool = True
+    director: bool = False
+    executive: bool = False
+
+
+class JobTypesModel(BaseModel):
+    full_time: bool = True
+    contract: bool = False
+    part_time: bool = False
+    temporary: bool = True
+    internship: bool = False
+    other: bool = False
+    volunteer: bool = True
+
+
+class DateFiltersModel(BaseModel):
+    all_time: bool = False
+    month: bool = False
+    week: bool = False
+    twenty_four_hours: bool = True
+
+    class Config:
+        populate_by_name = True
+
+    @classmethod
+    def from_yaml_dict(cls, data: dict) -> "DateFiltersModel":
+        return cls(
+            all_time=data.get("all_time", False),
+            month=data.get("month", False),
+            week=data.get("week", False),
+            twenty_four_hours=data.get("24_hours", True),
+        )
+
+    def to_yaml_dict(self) -> dict:
+        return {
+            "all_time": self.all_time,
+            "month": self.month,
+            "week": self.week,
+            "24_hours": self.twenty_four_hours,
+        }
+
+
+class WorkPreferences(BaseModel):
+    remote: bool = True
+    hybrid: bool = True
+    onsite: bool = True
+    experience_level: ExperienceLevelModel = ExperienceLevelModel()
+    job_types: JobTypesModel = JobTypesModel()
+    date: DateFiltersModel = DateFiltersModel()
+    positions: list[str] = ["Software engineer"]
+    locations: list[str] = ["Germany"]
+    apply_once_at_company: bool = True
+    distance: int = 100
+    company_blacklist: list[str] = ["wayfair", "Crossover"]
+    title_blacklist: list[str] = ["word1", "word2"]
+    location_blacklist: list[str] = ["Brazil"]
+
+    @classmethod
+    def from_yaml_dict(cls, data: dict) -> "WorkPreferences":
+        date_data = data.get("date", {})
+        date_model = DateFiltersModel.from_yaml_dict(date_data) if isinstance(date_data, dict) else DateFiltersModel()
+        return cls(
+            remote=data.get("remote", True),
+            hybrid=data.get("hybrid", True),
+            onsite=data.get("onsite", True),
+            experience_level=ExperienceLevelModel(**data["experience_level"]) if "experience_level" in data else ExperienceLevelModel(),
+            job_types=JobTypesModel(**data["job_types"]) if "job_types" in data else JobTypesModel(),
+            date=date_model,
+            positions=data.get("positions", ["Software engineer"]),
+            locations=data.get("locations", ["Germany"]),
+            apply_once_at_company=data.get("apply_once_at_company", True),
+            distance=data.get("distance", 100),
+            company_blacklist=data.get("company_blacklist") or [],
+            title_blacklist=data.get("title_blacklist") or [],
+            location_blacklist=data.get("location_blacklist") or [],
+        )
+
+    def to_yaml_dict(self) -> dict:
+        return {
+            "remote": self.remote,
+            "hybrid": self.hybrid,
+            "onsite": self.onsite,
+            "experience_level": self.experience_level.model_dump(),
+            "job_types": self.job_types.model_dump(),
+            "date": self.date.to_yaml_dict(),
+            "positions": self.positions,
+            "locations": self.locations,
+            "apply_once_at_company": self.apply_once_at_company,
+            "distance": self.distance,
+            "company_blacklist": self.company_blacklist,
+            "title_blacklist": self.title_blacklist,
+            "location_blacklist": self.location_blacklist,
+        }
+
+
+class ResumeUpdate(BaseModel):
+    resume_yaml: str
+
+
+DATA_FOLDER = Path("data_folder")
+WORK_PREFERENCES_PATH = DATA_FOLDER / "work_preferences.yaml"
+PLAIN_TEXT_RESUME_PATH = DATA_FOLDER / "plain_text_resume.yaml"
+
+APPROVED_DISTANCES = {0, 5, 10, 25, 50, 100}
+
+
+def _validate_work_preferences(data: dict) -> list[str]:
+    """Validate work preferences dict using the same rules as ConfigValidator."""
+    errors = []
+
+    # Validate experience levels are booleans
+    exp = data.get("experience_level", {})
+    if not isinstance(exp, dict):
+        errors.append("experience_level must be a dict")
+    else:
+        for level in ["internship", "entry", "associate", "mid_senior_level", "director", "executive"]:
+            if not isinstance(exp.get(level), bool):
+                errors.append(f"Experience level '{level}' must be a boolean")
+
+    # Validate job types are booleans
+    jt = data.get("job_types", {})
+    if not isinstance(jt, dict):
+        errors.append("job_types must be a dict")
+    else:
+        for job_type in ["full_time", "contract", "part_time", "temporary", "internship", "other", "volunteer"]:
+            if not isinstance(jt.get(job_type), bool):
+                errors.append(f"Job type '{job_type}' must be a boolean")
+
+    # Validate date filters are booleans
+    date = data.get("date", {})
+    if not isinstance(date, dict):
+        errors.append("date must be a dict")
+    else:
+        for df in ["all_time", "month", "week", "24_hours"]:
+            if not isinstance(date.get(df), bool):
+                errors.append(f"Date filter '{df}' must be a boolean")
+
+    # Validate positions and locations are lists of strings
+    for key in ["positions", "locations"]:
+        val = data.get(key, [])
+        if not isinstance(val, list) or not all(isinstance(item, str) for item in val):
+            errors.append(f"'{key}' must be a list of strings")
+
+    # Validate distance
+    dist = data.get("distance")
+    if dist not in APPROVED_DISTANCES:
+        errors.append(f"distance must be one of {sorted(APPROVED_DISTANCES)}")
+
+    # Validate blacklists are lists
+    for bl in ["company_blacklist", "title_blacklist", "location_blacklist"]:
+        val = data.get(bl)
+        if val is None:
+            continue
+        if not isinstance(val, list):
+            errors.append(f"'{bl}' must be a list")
+
+    return errors
+
+
 # WebSocket connection manager
 class ConnectionManager:
     """Manages WebSocket connections for real-time progress updates."""
@@ -434,6 +597,9 @@ async def generate_document(request: GenerateRequest):
     if request.action in ("resume_tailored", "cover_letter") and not request.job_url:
         raise HTTPException(status_code=400, detail="Job URL is required for tailored documents.")
 
+    # Ensure data_folder exists for generation artifacts
+    DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+
     # Create job
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {
@@ -488,6 +654,78 @@ async def download_document(job_id: str):
             "Content-Disposition": f'attachment; filename="{job.get("filename", "document.pdf")}"'
         },
     )
+
+
+@app.get("/api/preferences")
+async def get_preferences():
+    """Load work preferences from data_folder/work_preferences.yaml."""
+    if WORK_PREFERENCES_PATH.exists():
+        try:
+            with open(WORK_PREFERENCES_PATH, "r") as f:
+                data = yaml.safe_load(f)
+            if not isinstance(data, dict):
+                raise HTTPException(status_code=500, detail="Invalid work_preferences.yaml format.")
+            prefs = WorkPreferences.from_yaml_dict(data)
+        except yaml.YAMLError as exc:
+            raise HTTPException(status_code=500, detail=f"Error parsing work_preferences.yaml: {exc}")
+    else:
+        prefs = WorkPreferences()
+    return prefs.to_yaml_dict()
+
+
+@app.put("/api/preferences")
+async def update_preferences(prefs: WorkPreferences):
+    """Save work preferences to data_folder/work_preferences.yaml."""
+    yaml_dict = prefs.to_yaml_dict()
+
+    errors = _validate_work_preferences(yaml_dict)
+    if errors:
+        raise HTTPException(status_code=422, detail=errors)
+
+    DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+    try:
+        with open(WORK_PREFERENCES_PATH, "w") as f:
+            yaml.dump(yaml_dict, f, default_flow_style=False, sort_keys=False)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save preferences: {exc}")
+    return {"status": "ok", "message": "Work preferences saved."}
+
+
+@app.get("/api/resume")
+async def get_resume():
+    """Load plain text resume YAML from data_folder/plain_text_resume.yaml."""
+    if PLAIN_TEXT_RESUME_PATH.exists():
+        try:
+            content = PLAIN_TEXT_RESUME_PATH.read_text(encoding="utf-8")
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"Error reading resume file: {exc}")
+    else:
+        example_path = Path("data_folder_example") / "plain_text_resume.yaml"
+        if example_path.exists():
+            content = example_path.read_text(encoding="utf-8")
+        else:
+            content = "personal_information:\n  name: \"\"\n  surname: \"\"\n"
+    return {"resume_yaml": content}
+
+
+@app.put("/api/resume")
+async def update_resume(body: ResumeUpdate):
+    """Save plain text resume YAML to data_folder/plain_text_resume.yaml."""
+    if not body.resume_yaml.strip():
+        raise HTTPException(status_code=400, detail="Resume YAML content cannot be empty.")
+
+    if not _validate_resume_yaml(body.resume_yaml):
+        raise HTTPException(
+            status_code=422,
+            detail="Invalid resume YAML. Must be valid YAML with a 'personal_information' section.",
+        )
+
+    DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+    try:
+        PLAIN_TEXT_RESUME_PATH.write_text(body.resume_yaml, encoding="utf-8")
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save resume: {exc}")
+    return {"status": "ok", "message": "Resume saved."}
 
 
 @app.websocket("/ws/{job_id}")
