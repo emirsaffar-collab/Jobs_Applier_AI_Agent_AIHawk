@@ -6,7 +6,11 @@ Returns a complete HTML page with inline CSS and JavaScript.
 
 def get_html() -> str:
     """Return the complete HTML page for the web UI."""
-    return '''<!DOCTYPE html>
+    return _HTML
+
+
+_HTML = """\
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -44,7 +48,6 @@ def get_html() -> str:
             line-height: 1.6;
         }
 
-        /* Header */
         .header {
             background: white;
             border-bottom: 1px solid var(--gray-200);
@@ -69,41 +72,18 @@ def get_html() -> str:
 
         .header h1 .icon { font-size: 24px; }
 
-        .header-actions {
-            display: flex;
-            gap: 12px;
-            align-items: center;
-        }
+        .header-actions { display: flex; gap: 12px; align-items: center; }
 
-        .badge {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
+        .badge { padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: 600; }
         .badge-success { background: #dcfce7; color: var(--success); }
         .badge-warning { background: #fef3c7; color: var(--warning); }
         .badge-danger { background: #fee2e2; color: var(--danger); }
 
-        /* Layout */
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 24px;
-        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
 
-        .grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 24px;
-        }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
 
-        @media (max-width: 768px) {
-            .grid { grid-template-columns: 1fr; }
-        }
-
-        /* Cards */
         .card {
             background: white;
             border-radius: var(--radius);
@@ -120,41 +100,31 @@ def get_html() -> str:
             justify-content: space-between;
         }
 
-        .card-header h2 {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--gray-900);
-        }
-
+        .card-header h2 { font-size: 16px; font-weight: 600; color: var(--gray-900); }
         .card-body { padding: 20px; }
 
-        /* Forms */
-        .form-group {
-            margin-bottom: 16px;
-        }
-
+        .form-group { margin-bottom: 16px; }
         .form-group label {
-            display: block;
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--gray-700);
-            margin-bottom: 6px;
+            display: block; font-size: 13px; font-weight: 600;
+            color: var(--gray-700); margin-bottom: 6px;
         }
 
-        .form-group input,
+        .form-group input[type="text"],
+        .form-group input[type="password"],
+        .form-group input[type="url"],
         .form-group select,
         .form-group textarea {
-            width: 100%;
-            padding: 10px 12px;
+            width: 100%; padding: 10px 12px;
             border: 1px solid var(--gray-300);
             border-radius: var(--radius);
-            font-size: 14px;
-            color: var(--gray-800);
+            font-size: 14px; color: var(--gray-800);
             background: white;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
 
-        .form-group input:focus,
+        .form-group input[type="text"]:focus,
+        .form-group input[type="password"]:focus,
+        .form-group input[type="url"]:focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
@@ -164,489 +134,499 @@ def get_html() -> str:
 
         .form-group textarea {
             font-family: 'SF Mono', 'Fira Code', 'Fira Mono', monospace;
-            font-size: 12px;
-            resize: vertical;
-            min-height: 200px;
+            font-size: 12px; resize: vertical; min-height: 200px;
         }
 
-        .form-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
+        .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .form-help { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
 
-        .form-help {
-            font-size: 12px;
-            color: var(--gray-500);
-            margin-top: 4px;
-        }
-
-        /* Buttons */
         .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            padding: 10px 20px;
-            border-radius: var(--radius);
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-            transition: all 0.2s;
+            display: inline-flex; align-items: center; justify-content: center;
+            gap: 6px; padding: 10px 20px; border-radius: var(--radius);
+            font-size: 14px; font-weight: 600; cursor: pointer;
+            border: none; transition: all 0.2s;
         }
-
-        .btn:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
-        }
-
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-
-        .btn-primary:hover:not(:disabled) {
-            background: var(--primary-dark);
-        }
-
-        .btn-success {
-            background: var(--success);
-            color: white;
-        }
-
-        .btn-outline {
-            background: white;
-            color: var(--gray-700);
-            border: 1px solid var(--gray-300);
-        }
-
-        .btn-outline:hover:not(:disabled) {
-            background: var(--gray-50);
-        }
-
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover:not(:disabled) { background: var(--primary-dark); }
+        .btn-success { background: var(--success); color: white; }
+        .btn-outline { background: white; color: var(--gray-700); border: 1px solid var(--gray-300); }
+        .btn-outline:hover:not(:disabled) { background: var(--gray-50); }
+        .btn-sm { padding: 6px 12px; font-size: 12px; }
         .btn-block { width: 100%; }
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
 
-        .btn-group {
-            display: flex;
-            gap: 8px;
+        .main-tabs {
+            display: flex; border-bottom: 2px solid var(--gray-200);
+            margin-bottom: 24px; gap: 4px;
         }
 
-        /* Tabs */
-        .tabs {
-            display: flex;
-            border-bottom: 2px solid var(--gray-200);
-            margin-bottom: 20px;
+        .main-tab {
+            padding: 12px 24px; font-size: 15px; font-weight: 600;
+            color: var(--gray-500); cursor: pointer;
+            border-bottom: 3px solid transparent; margin-bottom: -2px;
+            transition: all 0.2s; background: none;
+            border-top: none; border-left: none; border-right: none;
+            user-select: none;
         }
+        .main-tab:hover { color: var(--gray-700); background: var(--gray-50); }
+        .main-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
 
-        .tab {
-            padding: 10px 16px;
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--gray-500);
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            margin-bottom: -2px;
-            transition: all 0.2s;
-            background: none;
-            border-top: none;
-            border-left: none;
-            border-right: none;
-        }
+        .tab-panel { display: none; }
+        .tab-panel.active { display: block; }
 
-        .tab:hover { color: var(--gray-700); }
-
-        .tab.active {
-            color: var(--primary);
-            border-bottom-color: var(--primary);
-        }
-
-        /* Progress */
-        .progress-container {
-            padding: 20px;
-            display: none;
-        }
-
+        .progress-container { padding: 20px; display: none; }
         .progress-container.active { display: block; }
 
         .progress-bar-track {
-            height: 8px;
-            background: var(--gray-200);
-            border-radius: 4px;
-            overflow: hidden;
-            margin: 12px 0;
+            height: 8px; background: var(--gray-200);
+            border-radius: 4px; overflow: hidden; margin: 12px 0;
         }
-
         .progress-bar-fill {
-            height: 100%;
-            background: var(--primary);
-            border-radius: 4px;
-            transition: width 0.5s ease;
-            width: 0%;
+            height: 100%; background: var(--primary);
+            border-radius: 4px; transition: width 0.5s ease; width: 0%;
         }
-
         .progress-bar-fill.success { background: var(--success); }
         .progress-bar-fill.error { background: var(--danger); }
+        .progress-text { font-size: 14px; color: var(--gray-600); text-align: center; }
+        .progress-percent { font-size: 24px; font-weight: 700; color: var(--gray-800); text-align: center; }
 
-        .progress-text {
-            font-size: 14px;
-            color: var(--gray-600);
-            text-align: center;
-        }
-
-        .progress-percent {
-            font-size: 24px;
-            font-weight: 700;
-            color: var(--gray-800);
-            text-align: center;
-        }
-
-        /* Status log */
         .status-log {
-            max-height: 200px;
-            overflow-y: auto;
-            font-size: 13px;
-            font-family: monospace;
-            background: var(--gray-50);
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius);
-            padding: 12px;
-            margin-top: 12px;
+            max-height: 200px; overflow-y: auto; font-size: 13px;
+            font-family: monospace; background: var(--gray-50);
+            border: 1px solid var(--gray-200); border-radius: var(--radius);
+            padding: 12px; margin-top: 12px;
         }
-
-        .status-entry {
-            padding: 4px 0;
-            border-bottom: 1px solid var(--gray-100);
-        }
-
+        .status-entry { padding: 4px 0; border-bottom: 1px solid var(--gray-100); }
         .status-entry:last-child { border-bottom: none; }
+        .status-time { color: var(--gray-400); font-size: 11px; margin-right: 8px; }
 
-        .status-time {
-            color: var(--gray-400);
-            font-size: 11px;
-            margin-right: 8px;
-        }
-
-        /* Alerts */
         .alert {
-            padding: 12px 16px;
-            border-radius: var(--radius);
-            margin-bottom: 16px;
-            font-size: 14px;
-            display: none;
+            padding: 12px 16px; border-radius: var(--radius);
+            margin-bottom: 16px; font-size: 14px; display: none;
         }
-
         .alert.show { display: block; }
+        .alert-error { background: #fee2e2; color: var(--danger); border: 1px solid #fecaca; }
+        .alert-success { background: #dcfce7; color: var(--success); border: 1px solid #bbf7d0; }
+        .alert-info { background: var(--primary-light); color: var(--primary-dark); border: 1px solid #93c5fd; }
 
-        .alert-error {
-            background: #fee2e2;
-            color: var(--danger);
-            border: 1px solid #fecaca;
-        }
-
-        .alert-success {
-            background: #dcfce7;
-            color: var(--success);
-            border: 1px solid #bbf7d0;
-        }
-
-        .alert-info {
-            background: var(--primary-light);
-            color: var(--primary-dark);
-            border: 1px solid #93c5fd;
-        }
-
-        /* Action cards */
-        .action-cards {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-
-        @media (max-width: 768px) {
-            .action-cards { grid-template-columns: 1fr; }
-        }
-
+        .action-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+        @media (max-width: 768px) { .action-cards { grid-template-columns: 1fr; } }
         .action-card {
-            padding: 16px;
-            border: 2px solid var(--gray-200);
-            border-radius: var(--radius);
-            cursor: pointer;
-            transition: all 0.2s;
-            text-align: center;
+            padding: 16px; border: 2px solid var(--gray-200);
+            border-radius: var(--radius); cursor: pointer;
+            transition: all 0.2s; text-align: center;
         }
+        .action-card:hover { border-color: var(--primary); background: var(--primary-light); }
+        .action-card.selected { border-color: var(--primary); background: var(--primary-light); }
+        .action-card .action-icon { font-size: 28px; margin-bottom: 8px; }
+        .action-card .action-title { font-weight: 600; font-size: 14px; color: var(--gray-800); }
+        .action-card .action-desc { font-size: 12px; color: var(--gray-500); margin-top: 4px; }
 
-        .action-card:hover {
-            border-color: var(--primary);
-            background: var(--primary-light);
-        }
-
-        .action-card.selected {
-            border-color: var(--primary);
-            background: var(--primary-light);
-        }
-
-        .action-card .action-icon {
-            font-size: 28px;
-            margin-bottom: 8px;
-        }
-
-        .action-card .action-title {
-            font-weight: 600;
-            font-size: 14px;
-            color: var(--gray-800);
-        }
-
-        .action-card .action-desc {
-            font-size: 12px;
-            color: var(--gray-500);
-            margin-top: 4px;
-        }
-
-        /* History */
         .history-item {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 0;
-            border-bottom: 1px solid var(--gray-100);
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 12px 0; border-bottom: 1px solid var(--gray-100);
         }
-
         .history-item:last-child { border-bottom: none; }
+        .history-info h4 { font-size: 14px; color: var(--gray-800); }
+        .history-info p { font-size: 12px; color: var(--gray-500); }
 
-        .history-info h4 {
-            font-size: 14px;
-            color: var(--gray-800);
-        }
-
-        .history-info p {
-            font-size: 12px;
-            color: var(--gray-500);
-        }
-
-        /* Spinner */
         .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid var(--gray-300);
-            border-top-color: var(--primary);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
+            display: inline-block; width: 16px; height: 16px;
+            border: 2px solid var(--gray-300); border-top-color: var(--primary);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Tooltip */
-        .tooltip {
-            position: relative;
-        }
-
+        .tooltip { position: relative; }
         .tooltip::after {
-            content: attr(data-tip);
-            position: absolute;
-            bottom: 100%;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--gray-800);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
+            content: attr(data-tip); position: absolute; bottom: 100%;
+            left: 50%; transform: translateX(-50%);
+            background: var(--gray-800); color: white;
+            padding: 4px 8px; border-radius: 4px; font-size: 12px;
+            white-space: nowrap; opacity: 0; pointer-events: none;
             transition: opacity 0.2s;
         }
-
         .tooltip:hover::after { opacity: 1; }
 
-        /* Full-width section */
-        .full-width {
-            grid-column: 1 / -1;
-        }
-
-        /* Hidden */
+        .full-width { grid-column: 1 / -1; }
         .hidden { display: none !important; }
-
-        /* Job URL group */
         #jobUrlGroup { display: none; }
         #jobUrlGroup.show { display: block; }
 
-        /* Example YAML button */
-        .example-link {
-            font-size: 12px;
-            color: var(--primary);
-            cursor: pointer;
-            text-decoration: underline;
+        .example-link { font-size: 12px; color: var(--primary); cursor: pointer; text-decoration: underline; }
+        .example-link:hover { color: var(--primary-dark); }
+
+        .settings-section {
+            margin-bottom: 24px; padding-bottom: 20px;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        .settings-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+        .settings-section h3 {
+            font-size: 15px; font-weight: 600; color: var(--gray-800);
+            margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
         }
 
-        .example-link:hover {
-            color: var(--primary-dark);
+        .check-group { display: flex; flex-wrap: wrap; gap: 12px; }
+        .check-item {
+            display: flex; align-items: center; gap: 6px;
+            font-size: 14px; color: var(--gray-700); cursor: pointer;
+        }
+        .check-item input[type="checkbox"],
+        .check-item input[type="radio"] {
+            width: 16px; height: 16px; accent-color: var(--primary); cursor: pointer;
+        }
+
+        .tag-input-wrap { display: flex; gap: 8px; margin-bottom: 8px; }
+        .tag-input-wrap input {
+            flex: 1; padding: 8px 12px;
+            border: 1px solid var(--gray-300); border-radius: var(--radius);
+            font-size: 14px; color: var(--gray-800); background: white;
+        }
+        .tag-input-wrap input:focus {
+            outline: none; border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-light);
+        }
+
+        .tag-list { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; }
+        .tag {
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 4px 10px; background: var(--primary-light);
+            color: var(--primary-dark); border-radius: 16px;
+            font-size: 13px; font-weight: 500;
+        }
+        .tag-remove {
+            cursor: pointer; font-size: 14px; font-weight: 700;
+            line-height: 1; opacity: 0.7; border: none;
+            background: none; color: var(--primary-dark); padding: 0 2px;
+        }
+        .tag-remove:hover { opacity: 1; }
+
+        .status-msg {
+            padding: 10px 14px; border-radius: var(--radius);
+            font-size: 13px; margin-top: 12px; display: none;
+        }
+        .status-msg.show { display: block; }
+        .status-msg.success { background: #dcfce7; color: var(--success); border: 1px solid #bbf7d0; }
+        .status-msg.error { background: #fee2e2; color: var(--danger); border: 1px solid #fecaca; }
+
+        .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+        @media (max-width: 768px) { .settings-grid { grid-template-columns: 1fr; } }
+
+        .resume-hint {
+            background: var(--primary-light); border: 1px solid #93c5fd;
+            border-radius: var(--radius); padding: 10px 14px;
+            font-size: 13px; color: var(--primary-dark); margin-bottom: 16px;
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
     <div class="header">
-        <h1>
-            <span class="icon">&#128640;</span>
-            AIHawk Resume Builder
-        </h1>
+        <h1><span class="icon">&#128640;</span> AIHawk Resume Builder</h1>
         <div class="header-actions">
             <span id="healthBadge" class="badge badge-warning">Checking...</span>
         </div>
     </div>
 
     <div class="container">
-        <!-- Alert area -->
-        <div id="alertArea">
-            <div id="alertBox" class="alert"></div>
+        <div id="alertArea"><div id="alertBox" class="alert"></div></div>
+
+        <div class="main-tabs">
+            <button class="main-tab active" onclick="switchTab('generate')">&#9889; Generate</button>
+            <button class="main-tab" onclick="switchTab('resume')">&#128221; Resume</button>
+            <button class="main-tab" onclick="switchTab('settings')">&#9881; Settings</button>
         </div>
 
-        <div class="grid">
-            <!-- Left Column: Configuration -->
-            <div>
-                <!-- API Configuration -->
-                <div class="card" style="margin-bottom: 24px;">
-                    <div class="card-header">
-                        <h2>&#128273; API Configuration</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="llmProvider">LLM Provider</label>
-                                <select id="llmProvider" onchange="onProviderChange()">
-                                    <option value="claude">Claude (Anthropic)</option>
-                                    <option value="openai">OpenAI</option>
-                                    <option value="gemini">Google Gemini</option>
-                                    <option value="ollama">Ollama (Local)</option>
-                                </select>
+        <!-- TAB 1: GENERATE -->
+        <div id="tab-generate" class="tab-panel active">
+            <div class="grid">
+                <div>
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header"><h2>&#128273; API Configuration</h2></div>
+                        <div class="card-body">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="llmProvider">LLM Provider</label>
+                                    <select id="llmProvider" onchange="onProviderChange()">
+                                        <option value="claude">Claude (Anthropic)</option>
+                                        <option value="openai">OpenAI</option>
+                                        <option value="gemini">Google Gemini</option>
+                                        <option value="ollama">Ollama (Local)</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="llmModel">Model</label>
+                                    <select id="llmModel">
+                                        <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                                        <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
+                                        <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                                    </select>
+                                </div>
                             </div>
                             <div class="form-group">
-                                <label for="llmModel">Model</label>
-                                <select id="llmModel">
-                                    <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                                    <option value="claude-3-5-sonnet-20241022">Claude 3.5 Sonnet</option>
-                                    <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                                </select>
+                                <label for="apiKey">API Key</label>
+                                <input type="password" id="apiKey" placeholder="Enter your API key...">
+                                <p class="form-help">Your API key is sent directly to the generation endpoint and is not stored.</p>
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label for="apiKey">API Key</label>
-                            <input type="password" id="apiKey" placeholder="Enter your API key...">
-                            <p class="form-help">Your API key is sent directly to the generation endpoint and is not stored.</p>
+                    </div>
+
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header"><h2>&#9889; Action</h2></div>
+                        <div class="card-body">
+                            <div class="action-cards">
+                                <div class="action-card selected" onclick="selectAction('resume')" id="action-resume">
+                                    <div class="action-icon">&#128196;</div>
+                                    <div class="action-title">Resume</div>
+                                    <div class="action-desc">Generate base resume</div>
+                                </div>
+                                <div class="action-card" onclick="selectAction('resume_tailored')" id="action-resume_tailored">
+                                    <div class="action-icon">&#127919;</div>
+                                    <div class="action-title">Tailored Resume</div>
+                                    <div class="action-desc">Resume for a job</div>
+                                </div>
+                                <div class="action-card" onclick="selectAction('cover_letter')" id="action-cover_letter">
+                                    <div class="action-icon">&#9993;</div>
+                                    <div class="action-title">Cover Letter</div>
+                                    <div class="action-desc">Tailored cover letter</div>
+                                </div>
+                            </div>
+                            <div class="form-group" id="jobUrlGroup">
+                                <label for="jobUrl">Job Posting URL</label>
+                                <input type="url" id="jobUrl" placeholder="https://www.linkedin.com/jobs/view/...">
+                                <p class="form-help">URL of the job posting to tailor your document to.</p>
+                            </div>
+                            <div class="form-group">
+                                <label for="styleSelect">Resume Style</label>
+                                <select id="styleSelect"><option value="">Loading styles...</option></select>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Action Selection -->
-                <div class="card" style="margin-bottom: 24px;">
-                    <div class="card-header">
-                        <h2>&#9889; Action</h2>
-                    </div>
-                    <div class="card-body">
-                        <div class="action-cards">
-                            <div class="action-card selected" onclick="selectAction(\'resume\')" id="action-resume">
-                                <div class="action-icon">&#128196;</div>
-                                <div class="action-title">Resume</div>
-                                <div class="action-desc">Generate base resume</div>
+                <div>
+                    <div class="card" style="margin-bottom: 24px;">
+                        <div class="card-header"><h2>&#128221; Resume Data</h2></div>
+                        <div class="card-body">
+                            <div class="resume-hint">
+                                &#128161; Edit your resume in the <strong>Resume</strong> tab. Your resume data will be loaded automatically when generating.
                             </div>
-                            <div class="action-card" onclick="selectAction(\'resume_tailored\')" id="action-resume_tailored">
-                                <div class="action-icon">&#127919;</div>
-                                <div class="action-title">Tailored Resume</div>
-                                <div class="action-desc">Resume for a job</div>
+                            <div id="resumePreview" style="font-size: 13px; color: var(--gray-600);">
+                                <p>No resume loaded yet. Go to the Resume tab to enter your data.</p>
                             </div>
-                            <div class="action-card" onclick="selectAction(\'cover_letter\')" id="action-cover_letter">
-                                <div class="action-icon">&#9993;</div>
-                                <div class="action-title">Cover Letter</div>
-                                <div class="action-desc">Tailored cover letter</div>
-                            </div>
-                        </div>
-                        <div class="form-group" id="jobUrlGroup">
-                            <label for="jobUrl">Job Posting URL</label>
-                            <input type="url" id="jobUrl" placeholder="https://www.linkedin.com/jobs/view/...">
-                            <p class="form-help">URL of the job posting to tailor your document to.</p>
-                        </div>
-                        <div class="form-group">
-                            <label for="styleSelect">Resume Style</label>
-                            <select id="styleSelect">
-                                <option value="">Loading styles...</option>
-                            </select>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Right Column: Resume Data -->
-            <div>
-                <div class="card" style="margin-bottom: 24px;">
-                    <div class="card-header">
-                        <h2>&#128221; Resume Data (YAML)</h2>
-                        <span class="example-link" onclick="loadExample()">Load Example</span>
-                    </div>
-                    <div class="card-body">
-                        <div class="form-group">
-                            <textarea id="resumeYaml" rows="22" placeholder="Paste your resume YAML here..."></textarea>
-                            <p class="form-help">Paste your resume in YAML format. Click &quot;Load Example&quot; to see the expected structure.</p>
+                <div class="full-width">
+                    <div class="card">
+                        <div class="card-body">
+                            <button id="generateBtn" class="btn btn-primary btn-block" onclick="startGeneration()">&#9889; Generate Document</button>
+                            <div id="progressContainer" class="progress-container">
+                                <div class="progress-percent" id="progressPercent">0%</div>
+                                <div class="progress-bar-track"><div class="progress-bar-fill" id="progressBar"></div></div>
+                                <div class="progress-text" id="progressText">Waiting...</div>
+                                <div class="status-log" id="statusLog"></div>
+                            </div>
+                            <div id="downloadSection" class="hidden" style="text-align: center; margin-top: 16px;">
+                                <button id="downloadBtn" class="btn btn-success" onclick="downloadDocument()">&#11015; Download PDF</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Full width: Generate button and progress -->
-            <div class="full-width">
-                <div class="card">
-                    <div class="card-body">
-                        <button id="generateBtn" class="btn btn-primary btn-block" onclick="startGeneration()">
-                            &#9889; Generate Document
-                        </button>
-
-                        <div id="progressContainer" class="progress-container">
-                            <div class="progress-percent" id="progressPercent">0%</div>
-                            <div class="progress-bar-track">
-                                <div class="progress-bar-fill" id="progressBar"></div>
-                            </div>
-                            <div class="progress-text" id="progressText">Waiting...</div>
-                            <div class="status-log" id="statusLog"></div>
+                <div class="full-width">
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>&#128203; Recent Generations</h2>
+                            <button class="btn btn-outline btn-sm" onclick="clearHistory()">Clear</button>
                         </div>
-
-                        <div id="downloadSection" class="hidden" style="text-align: center; margin-top: 16px;">
-                            <button id="downloadBtn" class="btn btn-success" onclick="downloadDocument()">
-                                &#11015; Download PDF
-                            </button>
+                        <div class="card-body" id="historyList">
+                            <p style="color: var(--gray-400); text-align: center; padding: 20px;">No documents generated yet.</p>
                         </div>
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- History -->
-            <div class="full-width">
-                <div class="card">
-                    <div class="card-header">
-                        <h2>&#128203; Recent Generations</h2>
-                        <button class="btn btn-outline" onclick="clearHistory()" style="padding: 6px 12px; font-size: 12px;">Clear</button>
+        <!-- TAB 2: RESUME -->
+        <div id="tab-resume" class="tab-panel">
+            <div class="card">
+                <div class="card-header">
+                    <h2>&#128221; Resume Data (YAML)</h2>
+                    <div class="btn-group">
+                        <button class="btn btn-outline btn-sm" onclick="loadResumeFromServer()">Load from Server</button>
+                        <button class="btn btn-outline btn-sm" onclick="loadExample()">Load Example</button>
                     </div>
-                    <div class="card-body" id="historyList">
-                        <p style="color: var(--gray-400); text-align: center; padding: 20px;">No documents generated yet.</p>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <textarea id="resumeYaml" rows="30" placeholder="Paste your resume YAML here..."></textarea>
+                        <p class="form-help">Paste your resume in YAML format or load it from the server. Click &quot;Load Example&quot; to see the expected structure.</p>
+                    </div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" onclick="saveResumeToServer()">&#128190; Save to Server</button>
+                    </div>
+                    <div id="resumeStatus" class="status-msg"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: SETTINGS -->
+        <div id="tab-settings" class="tab-panel">
+            <div class="card">
+                <div class="card-header">
+                    <h2>&#9881; Work Preferences</h2>
+                    <div class="btn-group">
+                        <button class="btn btn-outline btn-sm" onclick="loadPreferencesFromServer()">Load from Server</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="settings-grid">
+                        <div>
+                            <div class="settings-section">
+                                <h3>&#127968; Work Location</h3>
+                                <div class="check-group">
+                                    <label class="check-item"><input type="checkbox" id="pref_remote" checked> Remote</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_hybrid" checked> Hybrid</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_onsite" checked> On-site</label>
+                                </div>
+                            </div>
+                            <div class="settings-section">
+                                <h3>&#128188; Experience Level</h3>
+                                <div class="check-group">
+                                    <label class="check-item"><input type="checkbox" id="pref_exp_internship"> Internship</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_exp_entry" checked> Entry</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_exp_associate" checked> Associate</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_exp_mid_senior" checked> Mid-Senior Level</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_exp_director"> Director</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_exp_executive"> Executive</label>
+                                </div>
+                            </div>
+                            <div class="settings-section">
+                                <h3>&#128196; Job Types</h3>
+                                <div class="check-group">
+                                    <label class="check-item"><input type="checkbox" id="pref_jt_full_time" checked> Full-time</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_jt_contract"> Contract</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_jt_part_time"> Part-time</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_jt_temporary" checked> Temporary</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_jt_internship"> Internship</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_jt_other"> Other</label>
+                                    <label class="check-item"><input type="checkbox" id="pref_jt_volunteer" checked> Volunteer</label>
+                                </div>
+                            </div>
+                            <div class="settings-section">
+                                <h3>&#128197; Date Posted</h3>
+                                <div class="check-group">
+                                    <label class="check-item"><input type="radio" name="datePosted" value="all_time"> All Time</label>
+                                    <label class="check-item"><input type="radio" name="datePosted" value="month"> Month</label>
+                                    <label class="check-item"><input type="radio" name="datePosted" value="week"> Week</label>
+                                    <label class="check-item"><input type="radio" name="datePosted" value="24_hours" checked> 24 Hours</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <div class="settings-section">
+                                <h3>&#128269; Search Criteria</h3>
+                                <div class="form-group">
+                                    <label>Positions</label>
+                                    <div class="tag-input-wrap">
+                                        <input type="text" id="positionInput" placeholder="Add a position...">
+                                        <button class="btn btn-outline btn-sm" onclick="addTag('positions')">Add</button>
+                                    </div>
+                                    <div class="tag-list" id="positions-tags"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Locations</label>
+                                    <div class="tag-input-wrap">
+                                        <input type="text" id="locationInput" placeholder="Add a location...">
+                                        <button class="btn btn-outline btn-sm" onclick="addTag('locations')">Add</button>
+                                    </div>
+                                    <div class="tag-list" id="locations-tags"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label for="pref_distance">Distance (miles)</label>
+                                    <select id="pref_distance">
+                                        <option value="0">0</option>
+                                        <option value="5">5</option>
+                                        <option value="10">10</option>
+                                        <option value="25">25</option>
+                                        <option value="50">50</option>
+                                        <option value="100" selected>100</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="settings-section">
+                                <h3>&#128683; Blacklists</h3>
+                                <div class="form-group">
+                                    <label>Company Blacklist</label>
+                                    <div class="tag-input-wrap">
+                                        <input type="text" id="companyBlInput" placeholder="Add a company...">
+                                        <button class="btn btn-outline btn-sm" onclick="addTag('company_blacklist')">Add</button>
+                                    </div>
+                                    <div class="tag-list" id="company_blacklist-tags"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Title Blacklist</label>
+                                    <div class="tag-input-wrap">
+                                        <input type="text" id="titleBlInput" placeholder="Add a title keyword...">
+                                        <button class="btn btn-outline btn-sm" onclick="addTag('title_blacklist')">Add</button>
+                                    </div>
+                                    <div class="tag-list" id="title_blacklist-tags"></div>
+                                </div>
+                                <div class="form-group">
+                                    <label>Location Blacklist</label>
+                                    <div class="tag-input-wrap">
+                                        <input type="text" id="locationBlInput" placeholder="Add a location...">
+                                        <button class="btn btn-outline btn-sm" onclick="addTag('location_blacklist')">Add</button>
+                                    </div>
+                                    <div class="tag-list" id="location_blacklist-tags"></div>
+                                </div>
+                            </div>
+                            <div class="settings-section">
+                                <h3>&#9881; Other</h3>
+                                <div class="check-group">
+                                    <label class="check-item"><input type="checkbox" id="pref_apply_once" checked> Apply Once at Company</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="border-top: 1px solid var(--gray-200); padding-top: 20px; margin-top: 8px;">
+                        <div class="btn-group">
+                            <button class="btn btn-primary" onclick="savePreferencesToServer()">&#128190; Save Preferences</button>
+                            <button class="btn btn-outline" onclick="loadPreferencesFromServer()">&#128259; Reload from Server</button>
+                        </div>
+                        <div id="settingsStatus" class="status-msg"></div>
                     </div>
                 </div>
             </div>
         </div>
     </div>
-
     <script>
-        // State
+        /* ========== STATE ========== */
         let currentAction = 'resume';
         let currentJobId = null;
         let ws = null;
         let downloadUrl = null;
-        let history = JSON.parse(localStorage.getItem('aihawk_history') || '[]');
+        let genHistory = JSON.parse(localStorage.getItem('aihawk_history') || '[]');
 
-        // Model options per provider
+        const tagData = {
+            positions: [],
+            locations: [],
+            company_blacklist: [],
+            title_blacklist: [],
+            location_blacklist: [],
+        };
+
+        const tagInputIds = {
+            positions: 'positionInput',
+            locations: 'locationInput',
+            company_blacklist: 'companyBlInput',
+            title_blacklist: 'titleBlInput',
+            location_blacklist: 'locationBlInput',
+        };
+
         const modelOptions = {
             claude: [
                 { value: 'claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
@@ -669,7 +649,6 @@ def get_html() -> str:
             ],
         };
 
-        // Example YAML
         const exampleYaml = `personal_information:
   name: "John"
   surname: "Doe"
@@ -737,14 +716,48 @@ interests:
   - "Open Source"
   - "Cloud Architecture"`;
 
-        // Initialize
+        /* ========== INITIALIZATION ========== */
         document.addEventListener('DOMContentLoaded', () => {
             checkHealth();
             loadStyles();
             renderHistory();
+            loadResumeFromServer();
+            loadPreferencesFromServer();
+            setupTagEnterKeys();
         });
 
-        // Health check
+        /* ========== TAB SWITCHING ========== */
+        function switchTab(tabName) {
+            document.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.getElementById('tab-' + tabName).classList.add('active');
+            const tabs = document.querySelectorAll('.main-tab');
+            const tabMap = ['generate', 'resume', 'settings'];
+            const idx = tabMap.indexOf(tabName);
+            if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
+            if (tabName === 'generate') updateResumePreview();
+        }
+
+        function updateResumePreview() {
+            const yaml = document.getElementById('resumeYaml').value.trim();
+            const preview = document.getElementById('resumePreview');
+            if (yaml) {
+                const lines = yaml.split('\n');
+                const previewLines = lines.slice(0, 8).join('\n');
+                const more = lines.length > 8 ? `\n... (${lines.length - 8} more lines)` : '';
+                preview.innerHTML = `<pre style="font-size:12px;color:var(--gray-600);white-space:pre-wrap;margin:0;background:var(--gray-50);padding:12px;border-radius:var(--radius);border:1px solid var(--gray-200);max-height:200px;overflow-y:auto;">${escapeHtml(previewLines + more)}</pre>`;
+            } else {
+                preview.innerHTML = '<p>No resume loaded yet. Go to the Resume tab to enter your data.</p>';
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        /* ========== HEALTH CHECK ========== */
         async function checkHealth() {
             const badge = document.getElementById('healthBadge');
             try {
@@ -756,13 +769,13 @@ interests:
                     badge.className = 'badge badge-danger';
                     badge.textContent = 'Error';
                 }
-            } catch {
+            } catch(e) {
                 badge.className = 'badge badge-danger';
                 badge.textContent = 'Offline';
             }
         }
 
-        // Load styles
+        /* ========== LOAD STYLES ========== */
         async function loadStyles() {
             const select = document.getElementById('styleSelect');
             try {
@@ -779,12 +792,12 @@ interests:
                 } else {
                     select.innerHTML = '<option value="">No styles available</option>';
                 }
-            } catch {
+            } catch(e) {
                 select.innerHTML = '<option value="">Failed to load styles</option>';
             }
         }
 
-        // Provider change
+        /* ========== PROVIDER CHANGE ========== */
         function onProviderChange() {
             const provider = document.getElementById('llmProvider').value;
             const modelSelect = document.getElementById('llmModel');
@@ -798,7 +811,7 @@ interests:
             });
         }
 
-        // Action selection
+        /* ========== ACTION SELECTION ========== */
         function selectAction(action) {
             currentAction = action;
             document.querySelectorAll('.action-card').forEach(c => c.classList.remove('selected'));
@@ -811,12 +824,13 @@ interests:
             }
         }
 
-        // Load example
+        /* ========== LOAD EXAMPLE ========== */
         function loadExample() {
             document.getElementById('resumeYaml').value = exampleYaml;
+            showStatusMsg('resumeStatus', 'success', 'Example resume loaded.');
         }
 
-        // Show alert
+        /* ========== ALERTS ========== */
         function showAlert(type, message) {
             const box = document.getElementById('alertBox');
             box.className = `alert alert-${type} show`;
@@ -824,18 +838,234 @@ interests:
             setTimeout(() => { box.classList.remove('show'); }, 5000);
         }
 
-        // Add status log entry
+        function showStatusMsg(elementId, type, message) {
+            const el = document.getElementById(elementId);
+            if (!el) return;
+            el.className = `status-msg ${type} show`;
+            el.textContent = message;
+            setTimeout(() => { el.classList.remove('show'); }, 5000);
+        }
+
+        /* ========== STATUS LOG ========== */
         function addStatusLog(message) {
             const log = document.getElementById('statusLog');
             const time = new Date().toLocaleTimeString();
             const entry = document.createElement('div');
             entry.className = 'status-entry';
-            entry.innerHTML = `<span class="status-time">${time}</span>${message}`;
+            entry.innerHTML = `<span class="status-time">${time}</span>${escapeHtml(message)}`;
             log.appendChild(entry);
             log.scrollTop = log.scrollHeight;
         }
 
-        // Start generation
+        /* ========== RESUME: LOAD / SAVE ========== */
+        async function loadResumeFromServer() {
+            try {
+                const res = await fetch('/api/resume');
+                if (!res.ok) throw new Error('Failed to load resume');
+                const data = await res.json();
+                if (data.resume_yaml) {
+                    document.getElementById('resumeYaml').value = data.resume_yaml;
+                    showStatusMsg('resumeStatus', 'success', 'Resume loaded from server.');
+                }
+            } catch(e) {
+                showStatusMsg('resumeStatus', 'error', `Failed to load resume: ${e.message}`);
+            }
+        }
+
+        async function saveResumeToServer() {
+            const yaml = document.getElementById('resumeYaml').value.trim();
+            if (!yaml) {
+                showStatusMsg('resumeStatus', 'error', 'Resume YAML cannot be empty.');
+                return;
+            }
+            try {
+                const res = await fetch('/api/resume', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ resume_yaml: yaml }),
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Save failed');
+                }
+                const data = await res.json();
+                showStatusMsg('resumeStatus', 'success', data.message || 'Resume saved.');
+            } catch(e) {
+                showStatusMsg('resumeStatus', 'error', `Failed to save: ${e.message}`);
+            }
+        }
+
+        /* ========== PREFERENCES: LOAD / SAVE ========== */
+        async function loadPreferencesFromServer() {
+            try {
+                const res = await fetch('/api/preferences');
+                if (!res.ok) throw new Error('Failed to load preferences');
+                const data = await res.json();
+                populatePreferencesForm(data);
+                showStatusMsg('settingsStatus', 'success', 'Preferences loaded from server.');
+            } catch(e) {
+                showStatusMsg('settingsStatus', 'error', `Failed to load preferences: ${e.message}`);
+            }
+        }
+
+        function populatePreferencesForm(data) {
+            document.getElementById('pref_remote').checked = !!data.remote;
+            document.getElementById('pref_hybrid').checked = !!data.hybrid;
+            document.getElementById('pref_onsite').checked = !!data.onsite;
+
+            const exp = data.experience_level || {};
+            document.getElementById('pref_exp_internship').checked = !!exp.internship;
+            document.getElementById('pref_exp_entry').checked = !!exp.entry;
+            document.getElementById('pref_exp_associate').checked = !!exp.associate;
+            document.getElementById('pref_exp_mid_senior').checked = !!exp.mid_senior_level;
+            document.getElementById('pref_exp_director').checked = !!exp.director;
+            document.getElementById('pref_exp_executive').checked = !!exp.executive;
+
+            const jt = data.job_types || {};
+            document.getElementById('pref_jt_full_time').checked = !!jt.full_time;
+            document.getElementById('pref_jt_contract').checked = !!jt.contract;
+            document.getElementById('pref_jt_part_time').checked = !!jt.part_time;
+            document.getElementById('pref_jt_temporary').checked = !!jt.temporary;
+            document.getElementById('pref_jt_internship').checked = !!jt.internship;
+            document.getElementById('pref_jt_other').checked = !!jt.other;
+            document.getElementById('pref_jt_volunteer').checked = !!jt.volunteer;
+
+            const dt = data.date || {};
+            let selectedDate = '24_hours';
+            if (dt.all_time) selectedDate = 'all_time';
+            else if (dt.month) selectedDate = 'month';
+            else if (dt.week) selectedDate = 'week';
+            else if (dt['24_hours']) selectedDate = '24_hours';
+            const radios = document.querySelectorAll('input[name="datePosted"]');
+            radios.forEach(r => { r.checked = (r.value === selectedDate); });
+
+            tagData.positions = Array.isArray(data.positions) ? [...data.positions] : [];
+            renderTags('positions');
+            tagData.locations = Array.isArray(data.locations) ? [...data.locations] : [];
+            renderTags('locations');
+
+            document.getElementById('pref_distance').value = String(data.distance != null ? data.distance : 100);
+
+            tagData.company_blacklist = Array.isArray(data.company_blacklist) ? [...data.company_blacklist] : [];
+            renderTags('company_blacklist');
+            tagData.title_blacklist = Array.isArray(data.title_blacklist) ? [...data.title_blacklist] : [];
+            renderTags('title_blacklist');
+            tagData.location_blacklist = Array.isArray(data.location_blacklist) ? [...data.location_blacklist] : [];
+            renderTags('location_blacklist');
+
+            document.getElementById('pref_apply_once').checked = data.apply_once_at_company !== false;
+        }
+
+        function gatherPreferencesFromForm() {
+            const selectedDate = document.querySelector('input[name="datePosted"]:checked');
+            const dateValue = selectedDate ? selectedDate.value : '24_hours';
+
+            return {
+                remote: document.getElementById('pref_remote').checked,
+                hybrid: document.getElementById('pref_hybrid').checked,
+                onsite: document.getElementById('pref_onsite').checked,
+                experience_level: {
+                    internship: document.getElementById('pref_exp_internship').checked,
+                    entry: document.getElementById('pref_exp_entry').checked,
+                    associate: document.getElementById('pref_exp_associate').checked,
+                    mid_senior_level: document.getElementById('pref_exp_mid_senior').checked,
+                    director: document.getElementById('pref_exp_director').checked,
+                    executive: document.getElementById('pref_exp_executive').checked,
+                },
+                job_types: {
+                    full_time: document.getElementById('pref_jt_full_time').checked,
+                    contract: document.getElementById('pref_jt_contract').checked,
+                    part_time: document.getElementById('pref_jt_part_time').checked,
+                    temporary: document.getElementById('pref_jt_temporary').checked,
+                    internship: document.getElementById('pref_jt_internship').checked,
+                    other: document.getElementById('pref_jt_other').checked,
+                    volunteer: document.getElementById('pref_jt_volunteer').checked,
+                },
+                date: {
+                    all_time: dateValue === 'all_time',
+                    month: dateValue === 'month',
+                    week: dateValue === 'week',
+                    twenty_four_hours: dateValue === '24_hours',
+                },
+                positions: [...tagData.positions],
+                locations: [...tagData.locations],
+                apply_once_at_company: document.getElementById('pref_apply_once').checked,
+                distance: parseInt(document.getElementById('pref_distance').value, 10),
+                company_blacklist: [...tagData.company_blacklist],
+                title_blacklist: [...tagData.title_blacklist],
+                location_blacklist: [...tagData.location_blacklist],
+            };
+        }
+
+        async function savePreferencesToServer() {
+            const prefs = gatherPreferencesFromForm();
+            try {
+                const res = await fetch('/api/preferences', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(prefs),
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    const detail = err.detail;
+                    const msg = Array.isArray(detail) ? detail.join('; ') : (detail || 'Save failed');
+                    throw new Error(msg);
+                }
+                const data = await res.json();
+                showStatusMsg('settingsStatus', 'success', data.message || 'Preferences saved.');
+            } catch(e) {
+                showStatusMsg('settingsStatus', 'error', `Failed to save: ${e.message}`);
+            }
+        }
+
+        /* ========== TAG MANAGEMENT ========== */
+        function setupTagEnterKeys() {
+            Object.entries(tagInputIds).forEach(([key, inputId]) => {
+                const el = document.getElementById(inputId);
+                if (el) {
+                    el.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            addTag(key);
+                        }
+                    });
+                }
+            });
+        }
+
+        function addTag(group) {
+            const inputId = tagInputIds[group];
+            const input = document.getElementById(inputId);
+            if (!input) return;
+            const val = input.value.trim();
+            if (!val) return;
+            if (tagData[group].includes(val)) {
+                input.value = '';
+                return;
+            }
+            tagData[group].push(val);
+            input.value = '';
+            renderTags(group);
+        }
+
+        function removeTag(group, index) {
+            tagData[group].splice(index, 1);
+            renderTags(group);
+        }
+
+        function renderTags(group) {
+            const container = document.getElementById(group + '-tags');
+            if (!container) return;
+            if (tagData[group].length === 0) {
+                container.innerHTML = '<span style="color:var(--gray-400);font-size:12px;">None</span>';
+                return;
+            }
+            container.innerHTML = tagData[group].map((item, i) =>
+                `<span class="tag">${escapeHtml(item)}<button class="tag-remove" onclick="removeTag('${group}', ${i})" title="Remove">&times;</button></span>`
+            ).join('');
+        }
+
+        /* ========== GENERATION ========== */
         async function startGeneration() {
             const apiKey = document.getElementById('apiKey').value.trim();
             const resumeYaml = document.getElementById('resumeYaml').value.trim();
@@ -844,15 +1074,16 @@ interests:
             const provider = document.getElementById('llmProvider').value;
             const model = document.getElementById('llmModel').value;
 
-            // Validation
             if (!apiKey) { showAlert('error', 'Please enter your API key.'); return; }
-            if (!resumeYaml) { showAlert('error', 'Please paste your resume YAML.'); return; }
+            if (!resumeYaml) {
+                showAlert('error', 'No resume data found. Please go to the Resume tab and enter your resume YAML.');
+                return;
+            }
             if ((currentAction === 'resume_tailored' || currentAction === 'cover_letter') && !jobUrl) {
                 showAlert('error', 'Please enter a job posting URL for tailored documents.');
                 return;
             }
 
-            // Reset UI
             const btn = document.getElementById('generateBtn');
             btn.disabled = true;
             btn.innerHTML = '<span class="spinner"></span> Generating...';
@@ -888,14 +1119,10 @@ interests:
                 const data = await res.json();
                 currentJobId = data.job_id;
                 addStatusLog(`Job created: ${currentJobId.substring(0, 8)}...`);
-
-                // Connect WebSocket for progress
                 connectWebSocket(currentJobId);
-
-                // Also poll as fallback
                 pollStatus(currentJobId);
 
-            } catch (err) {
+            } catch(err) {
                 showAlert('error', `Failed to start generation: ${err.message}`);
                 btn.disabled = false;
                 btn.innerHTML = '&#9889; Generate Document';
@@ -903,7 +1130,7 @@ interests:
             }
         }
 
-        // WebSocket connection
+        /* ========== WEBSOCKET ========== */
         function connectWebSocket(jobId) {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws/${jobId}`;
@@ -915,10 +1142,10 @@ interests:
                 };
                 ws.onerror = () => { /* Fallback to polling */ };
                 ws.onclose = () => { ws = null; };
-            } catch { /* Fallback to polling */ }
+            } catch(e) { /* Fallback to polling */ }
         }
 
-        // Poll status fallback
+        /* ========== POLLING ========== */
         async function pollStatus(jobId) {
             const interval = setInterval(async () => {
                 try {
@@ -928,11 +1155,11 @@ interests:
                     if (data.status === 'completed' || data.status === 'failed') {
                         clearInterval(interval);
                     }
-                } catch { /* continue polling */ }
+                } catch(e) { /* continue polling */ }
             }, 2000);
         }
 
-        // Update progress UI
+        /* ========== PROGRESS UI ========== */
         function updateProgress(data) {
             const bar = document.getElementById('progressBar');
             const percent = document.getElementById('progressPercent');
@@ -962,52 +1189,53 @@ interests:
             }
         }
 
-        // Download
+        /* ========== DOWNLOAD ========== */
         function downloadDocument() {
             if (downloadUrl) {
                 window.location.href = downloadUrl;
             }
         }
 
-        // History
+        /* ========== HISTORY ========== */
         function addToHistory(action, url) {
             const labels = {
                 resume: 'Base Resume',
                 resume_tailored: 'Tailored Resume',
                 cover_letter: 'Cover Letter',
             };
-            history.unshift({
+            genHistory.unshift({
                 action: labels[action] || action,
                 time: new Date().toLocaleString(),
                 url: url,
             });
-            if (history.length > 10) history = history.slice(0, 10);
-            localStorage.setItem('aihawk_history', JSON.stringify(history));
+            if (genHistory.length > 10) genHistory = genHistory.slice(0, 10);
+            localStorage.setItem('aihawk_history', JSON.stringify(genHistory));
             renderHistory();
         }
 
         function renderHistory() {
             const list = document.getElementById('historyList');
-            if (history.length === 0) {
+            if (genHistory.length === 0) {
                 list.innerHTML = '<p style="color: var(--gray-400); text-align: center; padding: 20px;">No documents generated yet.</p>';
                 return;
             }
-            list.innerHTML = history.map(h => `
+            list.innerHTML = genHistory.map(h => `
                 <div class="history-item">
                     <div class="history-info">
-                        <h4>${h.action}</h4>
-                        <p>${h.time}</p>
+                        <h4>${escapeHtml(h.action)}</h4>
+                        <p>${escapeHtml(h.time)}</p>
                     </div>
-                    ${h.url ? `<a href="${h.url}" class="btn btn-outline" style="padding: 6px 12px; font-size: 12px; text-decoration: none;">Download</a>` : ''}
+                    ${h.url ? `<a href="${h.url}" class="btn btn-outline btn-sm" style="text-decoration:none;">Download</a>` : ''}
                 </div>
             `).join('');
         }
 
         function clearHistory() {
-            history = [];
+            genHistory = [];
             localStorage.removeItem('aihawk_history');
             renderHistory();
         }
+
     </script>
 </body>
-</html>'''
+</html>"""
