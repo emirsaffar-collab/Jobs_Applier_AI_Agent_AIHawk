@@ -562,4 +562,16 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "web":
+        # Web server mode
+        import uvicorn
+        import config as cfg
+        from src.web.app import app
+
+        print(f"Starting AIHawk web server on {cfg.WEB_HOST}:{cfg.WEB_PORT}")
+        uvicorn.run(app, host=cfg.WEB_HOST, port=cfg.WEB_PORT)
+    else:
+        # CLI mode (original behavior)
+        main()
