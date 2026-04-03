@@ -1184,9 +1184,9 @@ interests:
             const yaml = document.getElementById('resumeYaml').value.trim();
             const preview = document.getElementById('resumePreview');
             if (yaml) {
-                const lines = yaml.split('\n');
-                const previewLines = lines.slice(0, 8).join('\n');
-                const more = lines.length > 8 ? `\n... (${lines.length - 8} more lines)` : '';
+                const lines = yaml.split('\\n');
+                const previewLines = lines.slice(0, 8).join('\\n');
+                const more = lines.length > 8 ? '\\n... (' + (lines.length - 8) + ' more lines)' : '';
                 preview.innerHTML = `<pre style="font-size:12px;color:var(--gray-600);white-space:pre-wrap;margin:0;background:var(--gray-50);padding:12px;border-radius:var(--radius);border:1px solid var(--gray-200);max-height:200px;overflow-y:auto;">${escapeHtml(previewLines + more)}</pre>`;
             } else {
                 preview.innerHTML = '<p>No resume loaded yet. Go to the Resume tab to enter your data.</p>';
