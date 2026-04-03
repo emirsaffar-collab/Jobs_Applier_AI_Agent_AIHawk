@@ -18,9 +18,16 @@ JOB_MAX_APPLICATIONS = 5
 JOB_MIN_APPLICATIONS = 1
 
 LLM_MODEL_TYPE = os.environ.get('LLM_MODEL_TYPE', 'claude')
-LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-sonnet-4-20250514')
+LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-sonnet-4-6')
 # Only required for OLLAMA models
 LLM_API_URL = os.environ.get('LLM_API_URL', '')
+
+# LLM API key — set via env var for Railway/Docker, or via secrets.yaml for local use
+LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
+
+# Platform credentials via env vars (alternative to credentials.yaml)
+LINKEDIN_EMAIL = os.environ.get('LINKEDIN_EMAIL', '')
+LINKEDIN_PASSWORD = os.environ.get('LINKEDIN_PASSWORD', '')
 
 # CAPTCHA solving (CAPSolver)
 CAPSOLVER_API_KEY = os.environ.get('CAPSOLVER_API_KEY', '')

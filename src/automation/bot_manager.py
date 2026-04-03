@@ -22,8 +22,8 @@ class BotConfig:
     credentials: dict[str, dict]        # {platform: {email, password, ...}}
     preferences: dict[str, Any]         # work_preferences.yaml content
     llm_api_key: str
-    llm_model_type: str = "openai"
-    llm_model: str = "gpt-4o-mini"
+    llm_model_type: str = "claude"
+    llm_model: str = "claude-sonnet-4-6"
     min_score: int = 7
     max_applications: int = 50
     headless: bool = True

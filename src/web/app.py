@@ -33,9 +33,9 @@ class GenerateRequest(BaseModel):
     resume_yaml: str
     job_url: Optional[str] = None
     style: Optional[str] = None
-    llm_api_key: str
+    llm_api_key: str = ""  # Falls back to LLM_API_KEY env var when empty
     llm_model_type: str = "claude"
-    llm_model: str = "claude-sonnet-4-20250514"
+    llm_model: str = "claude-sonnet-4-6"
 
 
 class JobStatus(BaseModel):
@@ -418,7 +418,7 @@ def _generate_with_job_url(resume_facade: "ResumeFacade", request: GenerateReque
         raise RuntimeError(f"Failed to fetch job URL: {e}")
 
     # Parse job description using LLM
-    llm_parser = LLMParser(openai_api_key=global_config.API_KEY)
+    llm_parser = LLMParser(api_key=global_config.API_KEY)
     llm_parser.set_body_html(body_html)
 
     job = Job()
@@ -567,17 +567,37 @@ async def index():
 @app.get("/api/health")
 async def health():
     """Health check endpoint. Also reports which required data_folder files are missing."""
+    import config as cfg
     required_files = {
         "plain_text_resume.yaml": Path("data_folder/plain_text_resume.yaml"),
         "work_preferences.yaml": Path("data_folder/work_preferences.yaml"),
-        "secrets.yaml": Path("data_folder/secrets.yaml"),
     }
+    # secrets.yaml is only required when LLM_API_KEY env var is not set
+    if not cfg.LLM_API_KEY:
+        required_files["secrets.yaml"] = Path("data_folder/secrets.yaml")
+
     missing = [name for name, path in required_files.items() if not path.exists()]
     return {
         "status": "ok",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "data_folder_ready": len(missing) == 0,
         "missing_files": missing,
+    }
+
+
+@app.get("/api/config")
+async def get_config():
+    """Expose non-secret configuration to the frontend.
+
+    Tells the UI whether an API key is available via env var so the
+    API-key input field can be made optional.
+    """
+    import config as cfg
+    return {
+        "llm_api_key_configured": bool(cfg.LLM_API_KEY),
+        "llm_model_type": cfg.LLM_MODEL_TYPE,
+        "llm_model": cfg.LLM_MODEL,
+        "linkedin_configured": bool(cfg.LINKEDIN_EMAIL and cfg.LINKEDIN_PASSWORD),
     }
 
 
@@ -603,8 +623,13 @@ async def generate_document(request: GenerateRequest):
     if request.action not in ("resume", "resume_tailored", "cover_letter"):
         raise HTTPException(status_code=400, detail="Invalid action. Must be 'resume', 'resume_tailored', or 'cover_letter'.")
 
+    # Fall back to env var if no API key provided in request
+    import config as cfg
+    if not request.llm_api_key and cfg.LLM_API_KEY:
+        request.llm_api_key = cfg.LLM_API_KEY
+
     if not request.llm_api_key:
-        raise HTTPException(status_code=400, detail="LLM API key is required.")
+        raise HTTPException(status_code=400, detail="LLM API key is required. Set LLM_API_KEY env var or provide it in the request.")
 
     if not request.resume_yaml.strip():
         raise HTTPException(status_code=400, detail="Resume YAML is required.")
@@ -778,9 +803,9 @@ class BotStartRequest(BaseModel):
     max_applications: int = 50
     headless: bool = True
     generate_tailored_resume: bool = False
-    llm_api_key: str
-    llm_model_type: str = "openai"
-    llm_model: str = "gpt-4o-mini"
+    llm_api_key: str = ""  # Falls back to LLM_API_KEY env var when empty
+    llm_model_type: str = "claude"
+    llm_model: str = "claude-sonnet-4-6"
 
 
 class CredentialsUpdate(BaseModel):
@@ -823,12 +848,26 @@ _bot_connections: list[WebSocket] = []
 @app.post("/api/bot/start")
 async def bot_start(request: BotStartRequest):
     """Start the automation bot."""
+    import config as _cfg
     from src.automation.bot_manager import BotManager, BotConfig
     bot = BotManager()
     if bot.status == "running":
         raise HTTPException(status_code=409, detail="Bot is already running.")
 
+    # Fall back to env var if no API key provided in request
+    if not request.llm_api_key and _cfg.LLM_API_KEY:
+        request.llm_api_key = _cfg.LLM_API_KEY
+    if not request.llm_api_key:
+        raise HTTPException(status_code=400, detail="LLM API key is required. Set LLM_API_KEY env var or provide it in the request.")
+
     credentials = _load_credentials()
+
+    # Overlay env-var credentials for LinkedIn (Railway convenience)
+    if _cfg.LINKEDIN_EMAIL and _cfg.LINKEDIN_PASSWORD:
+        credentials.setdefault("linkedin", {})
+        credentials["linkedin"].setdefault("email", _cfg.LINKEDIN_EMAIL)
+        credentials["linkedin"].setdefault("password", _cfg.LINKEDIN_PASSWORD)
+
     preferences = _load_preferences()
 
     creds_by_platform = {}

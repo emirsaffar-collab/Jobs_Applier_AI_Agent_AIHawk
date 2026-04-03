@@ -5,9 +5,9 @@ This creates the cover letter (in html, utils will then convert in PDF) matching
 import os
 import textwrap
 from ..utils import LoggerChatModel
+from .llm_factory import create_chat_model, create_embeddings
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from pathlib import Path
 from dotenv import load_dotenv
 from requests.exceptions import HTTPError as HTTPStatusError
@@ -25,9 +25,9 @@ log_path = Path(log_folder).resolve()
 logger.add(log_path / "gpt_cover_letter_job_descr.log", rotation="1 day", compression="zip", retention="7 days", level="DEBUG")
 
 class LLMCoverLetterJobDescription:
-    def __init__(self, openai_api_key, strings):
-        self.llm_cheap = LoggerChatModel(ChatOpenAI(model_name="gpt-4o-mini", openai_api_key=openai_api_key, temperature=0.4))
-        self.llm_embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+    def __init__(self, api_key, strings):
+        self.llm_cheap = LoggerChatModel(create_chat_model(api_key))
+        self.llm_embeddings = create_embeddings(api_key)
         self.strings = strings
 
     @staticmethod

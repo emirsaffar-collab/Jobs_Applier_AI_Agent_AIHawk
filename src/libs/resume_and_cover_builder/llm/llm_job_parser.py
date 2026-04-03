@@ -4,9 +4,9 @@ import textwrap
 import time
 import re  # For email validation
 from src.libs.resume_and_cover_builder.utils import LoggerChatModel
+from src.libs.resume_and_cover_builder.llm.llm_factory import create_chat_model, create_embeddings
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate, PromptTemplate
-from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from loguru import logger
@@ -14,12 +14,10 @@ from pathlib import Path
 from langchain_core.prompt_values import StringPromptValue
 from langchain_core.runnables import RunnablePassthrough
 from langchain_text_splitters import TokenTextSplitter
-from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from lib_resume_builder_AIHawk.config import global_config
 from langchain_community.document_loaders import TextLoader
 from requests.exceptions import HTTPError as HTTPStatusError  # HTTP error handling
-import openai
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -33,13 +31,9 @@ logger.add(log_path / "gpt_resume.log", rotation="1 day", compression="zip", ret
 
 
 class LLMParser:
-    def __init__(self, openai_api_key):
-        self.llm = LoggerChatModel(
-            ChatOpenAI(
-                model_name="gpt-4o-mini", openai_api_key=openai_api_key, temperature=0.4
-            )
-        )
-        self.llm_embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)  # Initialize embeddings
+    def __init__(self, api_key):
+        self.llm = LoggerChatModel(create_chat_model(api_key))
+        self.llm_embeddings = create_embeddings(api_key)
         self.vectorstore = None  # Will be initialized after document loading
 
     @staticmethod

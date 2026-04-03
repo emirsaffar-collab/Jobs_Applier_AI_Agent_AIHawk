@@ -175,18 +175,35 @@ class ConfigValidator:
 
     @staticmethod
     def validate_secrets(secrets_yaml_path: Path) -> str:
-        """Validate the secrets YAML file and retrieve the LLM API key."""
-        secrets = ConfigValidator.load_yaml(secrets_yaml_path)
-        mandatory_secrets = ["llm_api_key"]
+        """Validate the secrets YAML file and retrieve the LLM API key.
 
-        for secret in mandatory_secrets:
-            if secret not in secrets:
-                raise ConfigError(f"Missing secret '{secret}' in {secrets_yaml_path}")
+        Falls back to the LLM_API_KEY environment variable when the YAML
+        file is missing or the key is empty, allowing Railway/Docker
+        deployments to configure secrets via env vars alone.
+        """
+        import config as cfg
 
-            if not secrets[secret]:
-                raise ConfigError(f"Secret '{secret}' cannot be empty in {secrets_yaml_path}")
+        # Prefer env var when set (Railway / Docker deployments)
+        if cfg.LLM_API_KEY:
+            return cfg.LLM_API_KEY
 
-        return secrets["llm_api_key"]
+        # Fall back to secrets.yaml
+        try:
+            secrets = ConfigValidator.load_yaml(secrets_yaml_path)
+        except ConfigError:
+            raise ConfigError(
+                f"LLM API key not found. Set the LLM_API_KEY environment variable "
+                f"or provide it in {secrets_yaml_path}"
+            )
+
+        api_key = secrets.get("llm_api_key", "")
+        if not api_key:
+            raise ConfigError(
+                f"LLM API key is empty. Set the LLM_API_KEY environment variable "
+                f"or provide 'llm_api_key' in {secrets_yaml_path}"
+            )
+
+        return api_key
 
 
 class FileManager:

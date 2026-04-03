@@ -18,6 +18,7 @@ document.addEventListener('DOMContentLoaded', function() {
   applyTheme(LS.get('theme', 'dark'));
   loadSavedApiKey();
   checkHealth();
+  checkEnvConfig();
   loadStyles();
   loadPreferencesFromServer();
   loadApplications();
@@ -47,6 +48,23 @@ function loadSavedApiKey() {
   if (k) { setVal('llmApiKey', k); setVal('botApiKey', k); setVal('oApiKey', k); }
   setVal('llmProvider', p); setVal('botProvider', p); setVal('oProvider', p);
   updateModelList();
+}
+
+async function checkEnvConfig() {
+  try {
+    const r = await fetch('/api/config');
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.llm_api_key_configured) {
+      // API key is set via env var — make fields optional and show hint
+      ['llmApiKey', 'botApiKey', 'oApiKey'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el && !el.value) {
+          el.placeholder = 'Configured via LLM_API_KEY env var';
+        }
+      });
+    }
+  } catch {}
 }
 
 const PAGE_TITLES = {
@@ -158,7 +176,7 @@ async function loadStyles() {
   } catch {}
 }
 const MODEL_LISTS = {
-  claude:  ['claude-opus-4-5', 'claude-sonnet-4-20250514', 'claude-haiku-3-5'],
+  claude:  ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
   openai:  ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
   gemini:  ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'],
   ollama:  ['llama3', 'mistral', 'codellama'],
