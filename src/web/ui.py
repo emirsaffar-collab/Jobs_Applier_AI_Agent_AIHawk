@@ -15,7 +15,7 @@ _HTML = """\
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AIHawk Resume Builder</title>
+    <title>AIHawk Jobs Applier</title>
     <style>
         :root {
             --primary: #2563eb;
@@ -323,7 +323,7 @@ _HTML = """\
 </head>
 <body>
     <div class="header">
-        <h1><span class="icon">&#128640;</span> AIHawk Resume Builder</h1>
+        <h1><span class="icon">&#128640;</span> AIHawk Jobs Applier</h1>
         <div class="header-actions">
             <span id="healthBadge" class="badge badge-warning">Checking...</span>
         </div>
@@ -336,6 +336,8 @@ _HTML = """\
             <button class="main-tab active" onclick="switchTab('generate')">&#9889; Generate</button>
             <button class="main-tab" onclick="switchTab('resume')">&#128221; Resume</button>
             <button class="main-tab" onclick="switchTab('settings')">&#9881; Settings</button>
+            <button class="main-tab" onclick="switchTab('bot')">&#129302; Auto Apply</button>
+            <button class="main-tab" onclick="switchTab('applications')">&#128196; Applications</button>
         </div>
 
         <!-- TAB 1: GENERATE -->
@@ -603,6 +605,233 @@ _HTML = """\
                 </div>
             </div>
         </div>
+
+        <!-- TAB 4: AUTO APPLY BOT -->
+        <div id="tab-bot" class="tab-panel">
+            <div class="grid">
+                <!-- Left: Configuration -->
+                <div>
+                    <!-- Platforms -->
+                    <div class="card" style="margin-bottom:20px">
+                        <div class="card-header"><h2>&#127758; Platforms</h2></div>
+                        <div class="card-body">
+                            <p style="margin-bottom:12px;color:var(--gray-500);font-size:13px">Select which job platforms to search and apply on.</p>
+                            <div style="display:flex;flex-wrap:wrap;gap:10px">
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="plt-linkedin" checked> LinkedIn</label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="plt-indeed"> Indeed</label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="plt-glassdoor"> Glassdoor</label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="plt-ziprecruiter"> ZipRecruiter</label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="plt-dice"> Dice</label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="plt-universal"> Universal (any URL)</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Credentials -->
+                    <div class="card" style="margin-bottom:20px">
+                        <div class="card-header">
+                            <h2>&#128272; Platform Credentials</h2>
+                            <button class="btn btn-outline btn-sm" onclick="loadCredentials()">Load Saved</button>
+                        </div>
+                        <div class="card-body">
+                            <p style="margin-bottom:12px;color:var(--gray-500);font-size:13px">Saved to <code>data_folder/credentials.yaml</code> on your machine.</p>
+                            <div id="credentials-panels">
+                                <div class="cred-panel" id="cred-linkedin">
+                                    <strong style="font-size:13px">LinkedIn</strong>
+                                    <div class="form-row" style="margin-top:8px">
+                                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="cred-linkedin-email" class="form-input" placeholder="you@email.com"></div>
+                                        <div class="form-group"><label class="form-label">Password</label><input type="password" id="cred-linkedin-password" class="form-input" placeholder="••••••••"></div>
+                                    </div>
+                                </div>
+                                <div class="cred-panel" id="cred-indeed" style="margin-top:12px;display:none">
+                                    <strong style="font-size:13px">Indeed</strong>
+                                    <div class="form-row" style="margin-top:8px">
+                                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="cred-indeed-email" class="form-input" placeholder="you@email.com"></div>
+                                        <div class="form-group"><label class="form-label">Password</label><input type="password" id="cred-indeed-password" class="form-input" placeholder="••••••••"></div>
+                                    </div>
+                                </div>
+                                <div class="cred-panel" id="cred-glassdoor" style="margin-top:12px;display:none">
+                                    <strong style="font-size:13px">Glassdoor</strong>
+                                    <div class="form-row" style="margin-top:8px">
+                                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="cred-glassdoor-email" class="form-input" placeholder="you@email.com"></div>
+                                        <div class="form-group"><label class="form-label">Password</label><input type="password" id="cred-glassdoor-password" class="form-input" placeholder="••••••••"></div>
+                                    </div>
+                                </div>
+                                <div class="cred-panel" id="cred-ziprecruiter" style="margin-top:12px;display:none">
+                                    <strong style="font-size:13px">ZipRecruiter</strong>
+                                    <div class="form-row" style="margin-top:8px">
+                                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="cred-ziprecruiter-email" class="form-input" placeholder="you@email.com"></div>
+                                        <div class="form-group"><label class="form-label">Password</label><input type="password" id="cred-ziprecruiter-password" class="form-input" placeholder="••••••••"></div>
+                                    </div>
+                                </div>
+                                <div class="cred-panel" id="cred-dice" style="margin-top:12px;display:none">
+                                    <strong style="font-size:13px">Dice</strong>
+                                    <div class="form-row" style="margin-top:8px">
+                                        <div class="form-group"><label class="form-label">Email</label><input type="email" id="cred-dice-email" class="form-input" placeholder="you@email.com"></div>
+                                        <div class="form-group"><label class="form-label">Password</label><input type="password" id="cred-dice-password" class="form-input" placeholder="••••••••"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="margin-top:12px">
+                                <button class="btn btn-primary btn-sm" onclick="saveCredentials()">&#128190; Save Credentials</button>
+                            </div>
+                            <div id="credStatus" class="status-msg"></div>
+                        </div>
+                    </div>
+
+                    <!-- Bot Settings -->
+                    <div class="card">
+                        <div class="card-header"><h2>&#9881; Bot Settings</h2></div>
+                        <div class="card-body">
+                            <div class="form-group">
+                                <label class="form-label">LLM Provider</label>
+                                <select id="bot-llm-type" class="form-input" onchange="updateBotModelOptions()">
+                                    <option value="openai">OpenAI</option>
+                                    <option value="claude">Claude (Anthropic)</option>
+                                    <option value="gemini">Google Gemini</option>
+                                    <option value="ollama">Ollama (local)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Model</label>
+                                <select id="bot-llm-model" class="form-input"></select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">API Key</label>
+                                <input type="password" id="bot-api-key" class="form-input" placeholder="sk-...  (not needed for Ollama)">
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label class="form-label">Min Score (1-10)</label>
+                                    <input type="number" id="bot-min-score" class="form-input" value="7" min="1" max="10">
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label">Max Applications</label>
+                                    <input type="number" id="bot-max-apps" class="form-input" value="50" min="1" max="500">
+                                </div>
+                            </div>
+                            <div style="display:flex;gap:20px;margin-top:4px">
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                    <input type="checkbox" id="bot-headless" checked> Headless browser
+                                </label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                                    <input type="checkbox" id="bot-tailored-resume"> Generate tailored resume per job
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right: Live Status & Log -->
+                <div>
+                    <div class="card" style="margin-bottom:20px">
+                        <div class="card-header">
+                            <h2>&#9654; Bot Control</h2>
+                            <div class="btn-group">
+                                <button id="btn-bot-start" class="btn btn-primary" onclick="botStart()">&#9654; Start</button>
+                                <button id="btn-bot-pause" class="btn btn-outline" onclick="botPause()" disabled>&#9646;&#9646; Pause</button>
+                                <button id="btn-bot-stop" class="btn" style="background:var(--danger);color:white" onclick="botStop()" disabled>&#9632; Stop</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div id="bot-status-banner" style="padding:12px;border-radius:6px;background:var(--gray-100);margin-bottom:16px;font-size:14px">
+                                Status: <strong id="bot-status-text">Idle</strong>
+                                &nbsp;|&nbsp; Platform: <span id="bot-platform-text">—</span>
+                                &nbsp;|&nbsp; Job: <span id="bot-job-text">—</span>
+                            </div>
+                            <div style="display:flex;gap:16px;margin-bottom:16px;text-align:center">
+                                <div style="flex:1;padding:12px;background:var(--gray-50);border-radius:6px;border:1px solid var(--gray-200)">
+                                    <div style="font-size:24px;font-weight:700;color:var(--success)" id="stat-applied">0</div>
+                                    <div style="font-size:12px;color:var(--gray-500)">Applied</div>
+                                </div>
+                                <div style="flex:1;padding:12px;background:var(--gray-50);border-radius:6px;border:1px solid var(--gray-200)">
+                                    <div style="font-size:24px;font-weight:700;color:var(--warning)" id="stat-skipped">0</div>
+                                    <div style="font-size:12px;color:var(--gray-500)">Skipped</div>
+                                </div>
+                                <div style="flex:1;padding:12px;background:var(--gray-50);border-radius:6px;border:1px solid var(--gray-200)">
+                                    <div style="font-size:24px;font-weight:700;color:var(--danger)" id="stat-failed">0</div>
+                                    <div style="font-size:12px;color:var(--gray-500)">Failed</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h2>&#128221; Live Log</h2>
+                            <button class="btn btn-outline btn-sm" onclick="clearBotLog()">Clear</button>
+                        </div>
+                        <div class="card-body" style="padding:0">
+                            <div id="bot-log" style="font-family:monospace;font-size:12px;background:#1e1e1e;color:#d4d4d4;padding:12px;height:300px;overflow-y:auto;border-radius:0 0 8px 8px">
+                                <div style="color:#888">Bot log will appear here when running...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: APPLICATIONS HISTORY -->
+        <div id="tab-applications" class="tab-panel">
+            <div class="card">
+                <div class="card-header">
+                    <h2>&#128196; Application History</h2>
+                    <div class="btn-group">
+                        <button class="btn btn-outline btn-sm" onclick="loadApplications()">&#128259; Refresh</button>
+                        <a id="btn-export-csv" href="/api/applications/export/csv" class="btn btn-outline btn-sm" download="applications.csv">&#128229; Export CSV</a>
+                    </div>
+                </div>
+                <div class="card-body" style="padding:0">
+                    <!-- Stats bar -->
+                    <div id="app-stats-bar" style="display:flex;gap:16px;padding:16px;border-bottom:1px solid var(--gray-200);flex-wrap:wrap">
+                        <div>Total: <strong id="app-stat-total">—</strong></div>
+                        <div style="color:var(--success)">Applied: <strong id="app-stat-applied">—</strong></div>
+                        <div style="color:var(--warning)">Skipped: <strong id="app-stat-skipped">—</strong></div>
+                        <div style="color:var(--danger)">Failed: <strong id="app-stat-failed">—</strong></div>
+                    </div>
+                    <!-- Filters -->
+                    <div style="display:flex;gap:12px;padding:12px 16px;border-bottom:1px solid var(--gray-200);flex-wrap:wrap">
+                        <select id="app-filter-platform" class="form-input" style="width:auto" onchange="loadApplications()">
+                            <option value="">All Platforms</option>
+                            <option value="linkedin">LinkedIn</option>
+                            <option value="indeed">Indeed</option>
+                            <option value="glassdoor">Glassdoor</option>
+                            <option value="ziprecruiter">ZipRecruiter</option>
+                            <option value="dice">Dice</option>
+                            <option value="universal">Universal</option>
+                        </select>
+                        <select id="app-filter-status" class="form-input" style="width:auto" onchange="loadApplications()">
+                            <option value="">All Statuses</option>
+                            <option value="applied">Applied</option>
+                            <option value="skipped">Skipped</option>
+                            <option value="failed">Failed</option>
+                            <option value="discovered">Discovered</option>
+                            <option value="scored">Scored</option>
+                        </select>
+                    </div>
+                    <!-- Table -->
+                    <div style="overflow-x:auto">
+                        <table id="app-table" style="width:100%;border-collapse:collapse;font-size:13px">
+                            <thead>
+                                <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200)">
+                                    <th style="padding:10px 16px;text-align:left;font-weight:600">Platform</th>
+                                    <th style="padding:10px 16px;text-align:left;font-weight:600">Company</th>
+                                    <th style="padding:10px 16px;text-align:left;font-weight:600">Title</th>
+                                    <th style="padding:10px 16px;text-align:left;font-weight:600">Score</th>
+                                    <th style="padding:10px 16px;text-align:left;font-weight:600">Status</th>
+                                    <th style="padding:10px 16px;text-align:left;font-weight:600">Date</th>
+                                    <th style="padding:10px 16px;text-align:left;font-weight:600">Link</th>
+                                </tr>
+                            </thead>
+                            <tbody id="app-tbody">
+                                <tr><td colspan="7" style="padding:24px;text-align:center;color:var(--gray-400)">Click Refresh to load applications.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
     <script>
         /* ========== STATE ========== */
@@ -733,10 +962,220 @@ interests:
             document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
             document.getElementById('tab-' + tabName).classList.add('active');
             const tabs = document.querySelectorAll('.main-tab');
-            const tabMap = ['generate', 'resume', 'settings'];
+            const tabMap = ['generate', 'resume', 'settings', 'bot', 'applications'];
             const idx = tabMap.indexOf(tabName);
             if (idx >= 0 && tabs[idx]) tabs[idx].classList.add('active');
             if (tabName === 'generate') updateResumePreview();
+            if (tabName === 'bot') updateBotModelOptions();
+            if (tabName === 'applications') loadApplications();
+        }
+
+        /* ========== PLATFORM CREDENTIAL PANEL TOGGLE ========== */
+        ['linkedin','indeed','glassdoor','ziprecruiter','dice'].forEach(p => {
+            const cb = document.getElementById('plt-' + p);
+            if (cb) cb.addEventListener('change', function() {
+                const panel = document.getElementById('cred-' + p);
+                if (panel) panel.style.display = this.checked ? 'block' : 'none';
+            });
+        });
+
+        /* ========== BOT LLM MODEL OPTIONS ========== */
+        function updateBotModelOptions() {
+            const type = document.getElementById('bot-llm-type').value;
+            const select = document.getElementById('bot-llm-model');
+            const options = modelOptions[type] || [];
+            select.innerHTML = options.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+        }
+
+        /* ========== CREDENTIALS ========== */
+        async function loadCredentials() {
+            try {
+                const res = await fetch('/api/credentials');
+                const data = await res.json();
+                ['linkedin','indeed','glassdoor','ziprecruiter','dice'].forEach(p => {
+                    const creds = data[p] || {};
+                    const emailEl = document.getElementById('cred-' + p + '-email');
+                    const passEl = document.getElementById('cred-' + p + '-password');
+                    if (emailEl && creds.email) emailEl.value = creds.email;
+                    if (passEl && creds.password) passEl.value = creds.password === '***' ? '' : creds.password;
+                });
+                showStatusMsg('credStatus', 'success', 'Credentials loaded.');
+            } catch(e) {
+                showStatusMsg('credStatus', 'error', 'Failed to load credentials: ' + e.message);
+            }
+        }
+
+        async function saveCredentials() {
+            const body = {};
+            ['linkedin','indeed','glassdoor','ziprecruiter','dice'].forEach(p => {
+                const emailEl = document.getElementById('cred-' + p + '-email');
+                const passEl = document.getElementById('cred-' + p + '-password');
+                if (emailEl && passEl && (emailEl.value || passEl.value)) {
+                    body[p] = { email: emailEl.value, password: passEl.value };
+                }
+            });
+            try {
+                const res = await fetch('/api/credentials', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (res.ok) showStatusMsg('credStatus', 'success', 'Credentials saved.');
+                else showStatusMsg('credStatus', 'error', data.detail || 'Save failed.');
+            } catch(e) {
+                showStatusMsg('credStatus', 'error', 'Network error: ' + e.message);
+            }
+        }
+
+        /* ========== BOT CONTROL ========== */
+        let botWs = null;
+
+        function botAppendLog(msg, color) {
+            const log = document.getElementById('bot-log');
+            const div = document.createElement('div');
+            div.style.color = color || '#d4d4d4';
+            div.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function clearBotLog() {
+            const log = document.getElementById('bot-log');
+            log.innerHTML = '';
+        }
+
+        function updateBotStatus(data) {
+            const stats = data.stats || {};
+            document.getElementById('bot-status-text').textContent = data.status || 'idle';
+            document.getElementById('bot-platform-text').textContent = stats.current_platform || '—';
+            document.getElementById('bot-job-text').textContent = stats.current_job || '—';
+            document.getElementById('stat-applied').textContent = stats.applied || 0;
+            document.getElementById('stat-skipped').textContent = stats.skipped || 0;
+            document.getElementById('stat-failed').textContent = stats.failed || 0;
+
+            const running = data.status === 'running';
+            const paused = data.status === 'paused';
+            const idle = data.status === 'idle';
+            document.getElementById('btn-bot-start').disabled = running || paused;
+            document.getElementById('btn-bot-pause').disabled = idle || paused;
+            document.getElementById('btn-bot-stop').disabled = idle;
+        }
+
+        function connectBotWs() {
+            if (botWs) botWs.close();
+            const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+            botWs = new WebSocket(proto + '//' + location.host + '/ws/bot');
+            botWs.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                if (data.msg) botAppendLog(data.msg);
+                updateBotStatus(data);
+            };
+            botWs.onclose = function() {
+                setTimeout(() => { if (document.getElementById('tab-bot').classList.contains('active')) connectBotWs(); }, 3000);
+            };
+        }
+
+        async function botStart() {
+            const platforms = ['linkedin','indeed','glassdoor','ziprecruiter','dice','universal']
+                .filter(p => document.getElementById('plt-' + p) && document.getElementById('plt-' + p).checked);
+            if (!platforms.length) { alert('Select at least one platform.'); return; }
+            const apiKey = document.getElementById('bot-api-key').value.trim();
+            const llmType = document.getElementById('bot-llm-type').value;
+            if (!apiKey && llmType !== 'ollama') { alert('Please enter your LLM API key.'); return; }
+
+            const body = {
+                platforms,
+                llm_api_key: apiKey,
+                llm_model_type: llmType,
+                llm_model: document.getElementById('bot-llm-model').value,
+                min_score: parseInt(document.getElementById('bot-min-score').value) || 7,
+                max_applications: parseInt(document.getElementById('bot-max-apps').value) || 50,
+                headless: document.getElementById('bot-headless').checked,
+                generate_tailored_resume: document.getElementById('bot-tailored-resume').checked,
+            };
+            try {
+                const res = await fetch('/api/bot/start', {
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    botAppendLog('Bot started — session ' + data.session_id, '#4ec9b0');
+                    connectBotWs();
+                } else {
+                    botAppendLog('Start failed: ' + (data.detail || 'Unknown error'), '#f44747');
+                }
+            } catch(e) {
+                botAppendLog('Network error: ' + e.message, '#f44747');
+            }
+        }
+
+        async function botPause() {
+            const s = document.getElementById('btn-bot-pause');
+            if (s.textContent.includes('Pause')) {
+                await fetch('/api/bot/pause', {method:'POST'});
+                s.textContent = '▶ Resume';
+            } else {
+                await fetch('/api/bot/resume', {method:'POST'});
+                s.textContent = '⏸ Pause';
+            }
+        }
+
+        async function botStop() {
+            await fetch('/api/bot/stop', {method:'POST'});
+            botAppendLog('Stop requested...', '#ce9178');
+        }
+
+        /* ========== APPLICATIONS ========== */
+        async function loadApplications() {
+            const platform = document.getElementById('app-filter-platform').value;
+            const status = document.getElementById('app-filter-status').value;
+            let url = '/api/applications?limit=200';
+            if (platform) url += '&platform=' + encodeURIComponent(platform);
+            if (status) url += '&status=' + encodeURIComponent(status);
+            try {
+                const res = await fetch(url);
+                const data = await res.json();
+                // Update stats
+                const stats = data.stats || {};
+                document.getElementById('app-stat-total').textContent = stats.total || 0;
+                document.getElementById('app-stat-applied').textContent = stats.applied || 0;
+                document.getElementById('app-stat-skipped').textContent = stats.skipped || 0;
+                document.getElementById('app-stat-failed').textContent = stats.failed || 0;
+                // Populate table
+                const tbody = document.getElementById('app-tbody');
+                const apps = data.applications || [];
+                if (!apps.length) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;color:var(--gray-400)">No applications found.</td></tr>';
+                    return;
+                }
+                const statusColors = {applied:'var(--success)',skipped:'var(--warning)',failed:'var(--danger)',discovered:'var(--gray-500)',scored:'var(--primary)'};
+                tbody.innerHTML = apps.map(a => `
+                    <tr style="border-bottom:1px solid var(--gray-100);cursor:pointer" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''">
+                        <td style="padding:10px 16px"><span class="badge" style="background:var(--primary-light);color:var(--primary)">${a.platform || '—'}</span></td>
+                        <td style="padding:10px 16px">${escHtml(a.company || '—')}</td>
+                        <td style="padding:10px 16px">${escHtml(a.title || '—')}</td>
+                        <td style="padding:10px 16px;text-align:center">${a.score ? '<strong>' + a.score + '</strong>/10' : '—'}</td>
+                        <td style="padding:10px 16px"><span style="color:${statusColors[a.status]||'var(--gray-500)'};font-weight:600">${a.status || '—'}</span></td>
+                        <td style="padding:10px 16px;color:var(--gray-500)">${a.applied_at ? new Date(a.applied_at).toLocaleDateString() : (a.discovered_at ? new Date(a.discovered_at).toLocaleDateString() : '—')}</td>
+                        <td style="padding:10px 16px">${a.url ? '<a href="' + escHtml(a.url) + '" target="_blank" style="color:var(--primary)">Open &#8599;</a>' : '—'}</td>
+                    </tr>
+                `).join('');
+            } catch(e) {
+                console.error('Failed to load applications:', e);
+            }
+        }
+
+        function escHtml(s) {
+            return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function showStatusMsg(id, type, msg) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.className = 'status-msg status-' + type;
+            el.textContent = msg;
+            setTimeout(() => { el.textContent = ''; el.className = 'status-msg'; }, 5000);
         }
 
         function updateResumePreview() {

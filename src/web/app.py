@@ -1,6 +1,7 @@
 """
-FastAPI web server for AIHawk Resume & Cover Letter Builder.
-Provides a web UI with async document generation and WebSocket progress updates.
+FastAPI web server for AIHawk Jobs Applier — unified multi-platform job application bot.
+Provides a web UI with async document generation, WebSocket progress updates,
+and an automated job application bot supporting LinkedIn, Indeed, Glassdoor, ZipRecruiter, Dice.
 """
 import asyncio
 import base64
@@ -12,15 +13,18 @@ from typing import Optional
 
 import yaml
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
 from src.logging import logger
 
-app = FastAPI(title="AIHawk Resume Builder", version="1.0.0")
+app = FastAPI(title="AIHawk Jobs Applier", version="2.0.0")
 
 # In-memory job store for generated documents
 _jobs: dict = {}
+
+# Credentials file path
+CREDENTIALS_PATH = Path("data_folder/credentials.yaml")
 
 
 class GenerateRequest(BaseModel):
@@ -750,3 +754,234 @@ async def websocket_endpoint(websocket: WebSocket, job_id: str):
                 break
     finally:
         manager.disconnect(websocket, job_id)
+
+
+# =============================================================================
+# Bot Control Endpoints
+# =============================================================================
+
+class BotStartRequest(BaseModel):
+    """Request body for POST /api/bot/start."""
+    platforms: list[str] = ["linkedin"]
+    min_score: int = 7
+    max_applications: int = 50
+    headless: bool = True
+    generate_tailored_resume: bool = False
+    llm_api_key: str
+    llm_model_type: str = "openai"
+    llm_model: str = "gpt-4o-mini"
+
+
+class CredentialsUpdate(BaseModel):
+    """Per-platform login credentials."""
+    linkedin: Optional[dict] = None       # {email, password}
+    indeed: Optional[dict] = None
+    glassdoor: Optional[dict] = None
+    ziprecruiter: Optional[dict] = None
+    dice: Optional[dict] = None
+
+
+def _load_credentials() -> dict:
+    """Load credentials.yaml, return empty dict if not found."""
+    if CREDENTIALS_PATH.exists():
+        try:
+            return yaml.safe_load(CREDENTIALS_PATH.read_text()) or {}
+        except Exception:
+            return {}
+    return {}
+
+
+def _save_credentials(data: dict) -> None:
+    CREDENTIALS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CREDENTIALS_PATH.write_text(yaml.dump(data, default_flow_style=False, sort_keys=False))
+
+
+def _load_preferences() -> dict:
+    if WORK_PREFERENCES_PATH.exists():
+        try:
+            return yaml.safe_load(WORK_PREFERENCES_PATH.read_text()) or {}
+        except Exception:
+            return {}
+    return {}
+
+
+# Bot WebSocket connections store
+_bot_connections: list[WebSocket] = []
+
+
+@app.post("/api/bot/start")
+async def bot_start(request: BotStartRequest):
+    """Start the automation bot."""
+    from src.automation.bot_manager import BotManager, BotConfig
+    bot = BotManager()
+    if bot.status == "running":
+        raise HTTPException(status_code=409, detail="Bot is already running.")
+
+    credentials = _load_credentials()
+    preferences = _load_preferences()
+
+    creds_by_platform = {}
+    for platform in request.platforms:
+        creds_by_platform[platform] = credentials.get(platform, {})
+
+    config = BotConfig(
+        platforms=request.platforms,
+        credentials=creds_by_platform,
+        preferences=preferences,
+        llm_api_key=request.llm_api_key,
+        llm_model_type=request.llm_model_type,
+        llm_model=request.llm_model,
+        min_score=request.min_score,
+        max_applications=request.max_applications,
+        headless=request.headless,
+        generate_tailored_resume=request.generate_tailored_resume,
+    )
+
+    # Register a callback to push log entries to all connected bot WebSocket clients
+    async def ws_broadcast(entry: dict):
+        dead = []
+        for ws in _bot_connections:
+            try:
+                await ws.send_json({"type": "log", **entry, **bot.get_status()})
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            if ws in _bot_connections:
+                _bot_connections.remove(ws)
+
+    bot.register_progress_callback(ws_broadcast)
+
+    session_id = await bot.start(config)
+    return {"status": "started", "session_id": session_id}
+
+
+@app.post("/api/bot/stop")
+async def bot_stop():
+    """Stop the running bot."""
+    from src.automation.bot_manager import BotManager
+    bot = BotManager()
+    await bot.stop()
+    return {"status": "stopped"}
+
+
+@app.post("/api/bot/pause")
+async def bot_pause():
+    """Pause the running bot."""
+    from src.automation.bot_manager import BotManager
+    bot = BotManager()
+    await bot.pause()
+    return {"status": "paused"}
+
+
+@app.post("/api/bot/resume")
+async def bot_resume():
+    """Resume a paused bot."""
+    from src.automation.bot_manager import BotManager
+    bot = BotManager()
+    await bot.resume()
+    return {"status": "running"}
+
+
+@app.get("/api/bot/status")
+async def bot_status():
+    """Get current bot status and stats."""
+    from src.automation.bot_manager import BotManager
+    bot = BotManager()
+    return bot.get_status()
+
+
+@app.websocket("/ws/bot")
+async def bot_websocket(websocket: WebSocket):
+    """WebSocket for real-time bot log streaming."""
+    await websocket.accept()
+    _bot_connections.append(websocket)
+    try:
+        # Send current status immediately
+        from src.automation.bot_manager import BotManager
+        bot = BotManager()
+        await websocket.send_json({"type": "status", **bot.get_status()})
+        # Keep alive — server pushes updates via ws_broadcast callback
+        while True:
+            try:
+                await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+    finally:
+        if websocket in _bot_connections:
+            _bot_connections.remove(websocket)
+
+
+# =============================================================================
+# Credentials Endpoints
+# =============================================================================
+
+@app.get("/api/credentials")
+async def get_credentials():
+    """Return saved credentials with passwords masked."""
+    creds = _load_credentials()
+    masked = {}
+    for platform, data in creds.items():
+        if isinstance(data, dict):
+            masked[platform] = {
+                k: ("***" if "password" in k.lower() or "secret" in k.lower() else v)
+                for k, v in data.items()
+            }
+    return masked
+
+
+@app.put("/api/credentials")
+async def update_credentials(body: CredentialsUpdate):
+    """Save credentials for each platform."""
+    existing = _load_credentials()
+    update_data = {
+        k: v for k, v in body.model_dump().items() if v is not None
+    }
+    existing.update(update_data)
+    try:
+        _save_credentials(existing)
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to save credentials: {exc}")
+    return {"status": "ok", "message": "Credentials saved."}
+
+
+# =============================================================================
+# Application History Endpoints
+# =============================================================================
+
+@app.get("/api/applications")
+async def list_applications(
+    platform: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+):
+    """List job applications from the tracker database."""
+    from src.automation.application_tracker import ApplicationTracker
+    tracker = ApplicationTracker()
+    apps = tracker.get_applications(platform=platform, status=status, limit=limit, offset=offset)
+    stats = tracker.get_stats()
+    return {"applications": apps, "stats": stats}
+
+
+@app.get("/api/applications/{app_id}")
+async def get_application(app_id: int):
+    """Get a single application by ID."""
+    from src.automation.application_tracker import ApplicationTracker
+    tracker = ApplicationTracker()
+    app = tracker.get_application(app_id)
+    if not app:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    return app
+
+
+@app.get("/api/applications/export/csv")
+async def export_applications_csv():
+    """Export all applications as CSV."""
+    from src.automation.application_tracker import ApplicationTracker
+    tracker = ApplicationTracker()
+    csv_data = tracker.export_csv()
+    return StreamingResponse(
+        iter([csv_data]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=applications.csv"},
+    )
