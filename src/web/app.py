@@ -339,8 +339,8 @@ def _reportlab_pdf_from_html(html_content: str) -> str:
     story = []
 
     # Strip HTML tags for simple text extraction (case-insensitive for safety)
-    text = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
-    text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<style[^>]*>.*?</style\s*>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<script[^>]*>.*?</script\s*>', '', text, flags=re.DOTALL | re.IGNORECASE)
 
     # Extract sections
     sections = re.split(r'<(?:h[12]|section)[^>]*>', text)
