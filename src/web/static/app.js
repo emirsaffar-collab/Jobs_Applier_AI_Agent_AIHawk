@@ -849,4 +849,3 @@ interests:
             localStorage.removeItem('aihawk_history');
             renderHistory();
         }
-
