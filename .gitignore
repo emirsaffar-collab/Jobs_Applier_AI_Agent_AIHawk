@@ -164,4 +164,5 @@ venv.bak/
 # Mono Auto Generated Files
 mono_crash.*
 
-job_applications/
+data_folder/applications.db-shm
+data_folder/applications.db-wal
