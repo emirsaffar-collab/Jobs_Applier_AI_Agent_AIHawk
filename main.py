@@ -300,50 +300,80 @@ def _prompt_job_url() -> str:
     """Ask the user for a job description URL."""
     questions = [inquirer.Text('job_url', message="Please enter the URL of the job description:")]
     answers = inquirer.prompt(questions)
+    if answers is None:
+        return ""
     return answers.get('job_url', '')
 
 
 def create_cover_letter(parameters: dict, llm_api_key: str):
     """Generate a tailored cover letter."""
+    driver = None
     try:
         logger.info("Generating a cover letter based on provided parameters.")
         job_url = _prompt_job_url()
+        if not job_url:
+            logger.warning("No job URL provided. Aborting.")
+            return
         resume_facade, _ = _setup_facade(parameters, llm_api_key, job_url)
+        driver = getattr(resume_facade, 'driver', None)
         result_base64, suggested_name = resume_facade.create_cover_letter()
 
         output_dir = Path(parameters["outputFileDirectory"]) / suggested_name
         _save_pdf(result_base64, output_dir, "cover_letter_tailored.pdf")
     except Exception as e:
         logger.exception(f"An error occurred while creating the cover letter: {e}")
+        # Ensure driver is cleaned up on error (create_cover_letter calls quit on success)
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
         raise
 
 
 def create_resume_pdf_job_tailored(parameters: dict, llm_api_key: str):
     """Generate a resume tailored to a job description."""
+    driver = None
     try:
         logger.info("Generating a tailored resume based on provided parameters.")
         job_url = _prompt_job_url()
+        if not job_url:
+            logger.warning("No job URL provided. Aborting.")
+            return
         resume_facade, _ = _setup_facade(parameters, llm_api_key, job_url)
+        driver = getattr(resume_facade, 'driver', None)
         result_base64, suggested_name = resume_facade.create_resume_pdf_job_tailored()
 
         output_dir = Path(parameters["outputFileDirectory"]) / suggested_name
         _save_pdf(result_base64, output_dir, "resume_tailored.pdf")
     except Exception as e:
         logger.exception(f"An error occurred while creating the tailored resume: {e}")
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
         raise
 
 
 def create_resume_pdf(parameters: dict, llm_api_key: str):
     """Generate a base resume PDF."""
+    driver = None
     try:
         logger.info("Generating a base resume.")
         resume_facade, _ = _setup_facade(parameters, llm_api_key)
+        driver = getattr(resume_facade, 'driver', None)
         result_base64 = resume_facade.create_resume_pdf()
 
         output_dir = Path(parameters["outputFileDirectory"])
         _save_pdf(result_base64, output_dir, "resume_base.pdf")
     except Exception as e:
         logger.exception(f"An error occurred while creating the resume: {e}")
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
         raise
 
         

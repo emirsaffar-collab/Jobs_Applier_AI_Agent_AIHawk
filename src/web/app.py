@@ -328,8 +328,9 @@ async def _run_generation(job_id: str, request: GenerateRequest):
     """Run document generation in a background thread with progress updates."""
     import config as cfg
 
+    # Save/restore global config to avoid concurrent request interference
+    orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
     try:
-        # Update config with user-selected LLM
         cfg.LLM_MODEL_TYPE = request.llm_model_type
         cfg.LLM_MODEL = request.llm_model
 
@@ -440,6 +441,10 @@ async def _run_generation(job_id: str, request: GenerateRequest):
             "status": "failed", "progress": 0, "message": f"Error: {e}",
             "error": str(e),
         })
+    finally:
+        # Restore global config
+        cfg.LLM_MODEL_TYPE = orig_type
+        cfg.LLM_MODEL = orig_model
 
 
 def _generate_with_job_url(resume_facade: "ResumeFacade", request: GenerateRequest):
@@ -1001,10 +1006,19 @@ async def upload_pdf_resume(
             detail="LLM API key is required. Configure it in Step 1 or set the LLM_API_KEY environment variable.",
         )
 
-    # Apply model settings
+    # Apply model settings (save/restore for concurrency safety)
+    orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
     cfg.LLM_MODEL_TYPE = llm_model_type
     cfg.LLM_MODEL = llm_model
 
+    try:
+        return await _upload_pdf_inner(file, api_key)
+    finally:
+        cfg.LLM_MODEL_TYPE = orig_type
+        cfg.LLM_MODEL = orig_model
+
+
+async def _upload_pdf_inner(file: UploadFile, api_key: str):
     # Read and extract text from PDF
     pdf_bytes = await file.read()
     if len(pdf_bytes) == 0:

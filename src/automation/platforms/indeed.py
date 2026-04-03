@@ -90,7 +90,7 @@ class IndeedPlatform(BasePlatform):
                                 continue
                             if company.lower() in blacklisted_companies:
                                 continue
-                            if any(w in title.lower() for w in blacklisted_titles):
+                            if any(w == title.lower() or w in title.lower().split() for w in blacklisted_titles):
                                 continue
 
                             jobs.append(JobListing(

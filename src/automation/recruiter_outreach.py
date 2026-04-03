@@ -115,18 +115,12 @@ class RecruiterOutreach:
             msg_btn = await page.wait_for_selector(
                 self.MESSAGE_BTN_SELECTOR, timeout=5000, state="visible"
             )
-            if not msg_btn:
-                return False
             await msg_btn.click()
             await asyncio.sleep(random.uniform(1.5, 3.0))
 
-            # Wait for message box
             msg_box = await page.wait_for_selector(
                 self.MESSAGE_BOX_SELECTOR, timeout=5000, state="visible"
             )
-            if not msg_box:
-                return False
-
             await msg_box.fill(message)
             await asyncio.sleep(random.uniform(0.5, 1.5))
 
@@ -146,27 +140,18 @@ class RecruiterOutreach:
             connect_btn = await page.wait_for_selector(
                 self.CONNECT_BTN_SELECTOR, timeout=5000, state="visible"
             )
-            if not connect_btn:
-                return False
             await connect_btn.click()
             await asyncio.sleep(random.uniform(1.0, 2.0))
 
-            # Click "Add a note"
             add_note = await page.wait_for_selector(
                 self.ADD_NOTE_BTN, timeout=5000, state="visible"
             )
-            if not add_note:
-                return False
             await add_note.click()
             await asyncio.sleep(random.uniform(0.5, 1.5))
 
-            # Fill in the note (LinkedIn limits to 300 chars)
             note_box = await page.wait_for_selector(
                 self.NOTE_TEXTAREA, timeout=5000, state="visible"
             )
-            if not note_box:
-                return False
-
             truncated = message[:300]
             await note_box.fill(truncated)
             await asyncio.sleep(random.uniform(0.5, 1.0))

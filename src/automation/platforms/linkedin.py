@@ -296,7 +296,7 @@ class LinkedInPlatform(BasePlatform):
                     title = (await title_el.text_content() if title_el else "").strip()
                     company = (await company_el.text_content() if company_el else "").strip()
                     location = (await location_el.text_content() if location_el else "").strip()
-                    link = await title_el.get_attribute("href") if title_el else ""
+                    link = (await title_el.get_attribute("href") or "") if title_el else ""
                     if link:
                         link = link.split("?")[0]  # strip tracking params
 
@@ -402,12 +402,15 @@ class LinkedInPlatform(BasePlatform):
 
             # No button found — try clicking any visible primary button
             try:
-                primary = await page.query_selector(
-                    ".artdeco-button--primary:visible"
-                )
-                if primary:
-                    await primary.click()
-                    step += 1
+                primaries = await page.query_selector_all(".artdeco-button--primary")
+                for primary in primaries:
+                    if await primary.is_visible():
+                        await primary.click()
+                        step += 1
+                        break
+                else:
+                    primary = None
+                if primary and await primary.is_visible():
                     continue
             except Exception as exc:
                 logger.debug("LinkedIn primary button click error: {}", exc)
@@ -469,7 +472,32 @@ class LinkedInPlatform(BasePlatform):
                 value = (await inp.input_value()).strip()
                 if value:
                     continue  # already filled
-                label_el = await inp.query_selector("xpath=../../..//label")
+                # Try multiple strategies to find the label
+                label_el = await inp.evaluate_handle(
+                    """el => {
+                        // Try closest label wrapper
+                        const wrapper = el.closest('.jobs-easy-apply-form-element');
+                        if (wrapper) {
+                            const lbl = wrapper.querySelector('label');
+                            if (lbl) return lbl;
+                        }
+                        // Try aria-label
+                        const id = el.id;
+                        if (id) {
+                            const lbl = document.querySelector('label[for="' + id + '"]');
+                            if (lbl) return lbl;
+                        }
+                        // Walk up to find nearest label
+                        let parent = el.parentElement;
+                        for (let i = 0; i < 5 && parent; i++) {
+                            const lbl = parent.querySelector('label');
+                            if (lbl) return lbl;
+                            parent = parent.parentElement;
+                        }
+                        return null;
+                    }"""
+                )
+                label_el = label_el.as_element() if label_el else None
                 label_text = (await label_el.text_content() if label_el else "").strip()
                 answer = await self._answer_with_llm(label_text or "Please fill in")
                 tag = await inp.evaluate("el => el.tagName.toLowerCase()")
@@ -491,7 +519,16 @@ class LinkedInPlatform(BasePlatform):
                     continue
                 options = []
                 for r in radios:
-                    lbl = await r.query_selector("xpath=following-sibling::label")
+                    # Get label via for= attribute or parent label element
+                    r_id = await r.get_attribute("id")
+                    lbl = None
+                    if r_id:
+                        lbl = await page.query_selector(f"label[for='{r_id}']")
+                    if not lbl:
+                        lbl = await r.evaluate_handle(
+                            "el => el.closest('label') || el.parentElement.querySelector('label')"
+                        )
+                        lbl = lbl.as_element() if lbl else None
                     options.append((await lbl.text_content() if lbl else "").strip())
                 best = await self._answer_with_llm(question, options)
                 for i, r in enumerate(radios):
@@ -515,7 +552,24 @@ class LinkedInPlatform(BasePlatform):
                     continue
                 options = await sel.query_selector_all("option")
                 texts = [(await o.text_content() or "").strip() for o in options]
-                label_el = await sel.query_selector("xpath=../..//label")
+                # Find label for select element
+                sel_id = await sel.get_attribute("id")
+                label_el = None
+                if sel_id:
+                    label_el = await page.query_selector(f"label[for='{sel_id}']")
+                if not label_el:
+                    label_el_handle = await sel.evaluate_handle(
+                        """el => {
+                            let parent = el.parentElement;
+                            for (let i = 0; i < 5 && parent; i++) {
+                                const lbl = parent.querySelector('label');
+                                if (lbl) return lbl;
+                                parent = parent.parentElement;
+                            }
+                            return null;
+                        }"""
+                    )
+                    label_el = label_el_handle.as_element() if label_el_handle else None
                 question = (await label_el.text_content() if label_el else "").strip()
                 best = await self._answer_with_llm(question, [t for t in texts if t])
                 await sel.select_option(label=best)

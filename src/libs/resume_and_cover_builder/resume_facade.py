@@ -110,7 +110,7 @@ class ResumeFacade:
     
     
     
-    def create_resume_pdf(self) -> tuple[bytes, str]:
+    def create_resume_pdf(self) -> str:
         """
         Create a resume PDF using the selected style and the given job description text.
         Args:
