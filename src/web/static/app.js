@@ -127,6 +127,55 @@ function loadResumeIntoGenerate() {
   showPage('generate');
 }
 
+async function uploadPdfResume(source) {
+  const fileInputId = source === 'onboarding' ? 'onboardingPdfFile' : 'resumePdfFile';
+  const statusId = source === 'onboarding' ? 'onboardingUploadStatus' : 'resumeUploadStatus';
+  const btnId = source === 'onboarding' ? 'onboardingUploadBtn' : 'resumeUploadBtn';
+  const fileInput = document.getElementById(fileInputId);
+  const btn = document.getElementById(btnId);
+  if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+    showStatus(statusId, 'Please select a PDF file first.', 'error');
+    return;
+  }
+  const file = fileInput.files[0];
+  if (!file.name.toLowerCase().endsWith('.pdf')) {
+    showStatus(statusId, 'Please select a PDF file.', 'error');
+    return;
+  }
+  const apiKey = LS.get('api_key', '') || '';
+  const provider = LS.get('api_provider', 'claude') || 'claude';
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('llm_api_key', apiKey);
+  fd.append('llm_model_type', provider);
+  fd.append('llm_model', provider === 'claude' ? 'claude-sonnet-4-6' : provider === 'openai' ? 'gpt-4o' : provider === 'gemini' ? 'gemini-2.0-flash' : 'llama3');
+  showStatus(statusId, 'Uploading and parsing your CV... This may take a moment.', 'info');
+  if (btn) btn.disabled = true;
+  try {
+    const r = await fetch('/api/resume/upload-pdf', { method: 'POST', body: fd });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ detail: 'Upload failed' }));
+      throw new Error(err.detail || 'Upload failed');
+    }
+    const d = await r.json();
+    setVal('resumeYaml', d.resume_yaml || '');
+    showStatus(statusId, 'CV parsed successfully! Review the YAML below and save when ready.', 'success');
+    if (source === 'onboarding') {
+      showStatus(statusId, 'CV parsed! It will be available on the Resume page. Click "Skip for Now" to continue.', 'success');
+    } else {
+      showStatus('resumeStatus', 'CV parsed successfully. Review and save.', 'success');
+    }
+    // If preferences were inferred, store them for later
+    if (d.inferred_preferences) {
+      LS.set('inferred_preferences', d.inferred_preferences);
+    }
+  } catch(e) {
+    showStatus(statusId, 'Error: ' + e.message, 'error');
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
 async function loadPreferencesFromServer() {
   try {
     const r = await fetch('/api/preferences'); if (!r.ok) return; const d = await r.json();
@@ -142,6 +191,17 @@ async function loadPreferencesFromServer() {
     const df = d.date_filters || {};
     if (df.all_time) setRadio('dfAllTime'); else if (df.month) setRadio('dfMonth'); else if (df.week) setRadio('dfWeek'); else setRadio('df24h');
     tags.positions = d.positions || []; tags.locations = d.locations || [];
+    // Apply inferred preferences from CV upload if current values are defaults
+    const inferred = LS.get('inferred_preferences', null);
+    if (inferred) {
+      if (inferred.positions && inferred.positions.length && tags.positions.length <= 1 && (tags.positions.length === 0 || tags.positions[0] === 'Software engineer')) {
+        tags.positions = inferred.positions;
+      }
+      if (inferred.locations && inferred.locations.length && tags.locations.length <= 1 && (tags.locations.length === 0 || tags.locations[0] === 'Germany')) {
+        tags.locations = inferred.locations;
+      }
+      LS.remove('inferred_preferences');
+    }
     tags.blCompanies = d.company_blacklist || []; tags.blTitles = d.title_blacklist || []; tags.blLocations = d.location_blacklist || [];
     renderAllTags();
     setVal('prefDistance', String(d.distance ?? 25));

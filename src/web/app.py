@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 
@@ -766,6 +766,229 @@ async def update_resume(body: ResumeUpdate):
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save resume: {exc}")
     return {"status": "ok", "message": "Resume saved."}
+
+
+def _extract_text_from_pdf(pdf_bytes: bytes) -> str:
+    """Extract text content from a PDF file using pdfminer."""
+    import io
+    from pdfminer.high_level import extract_text
+
+    return extract_text(io.BytesIO(pdf_bytes))
+
+
+_CV_PARSE_PROMPT = """\
+You are a resume/CV parser. Given the text extracted from a PDF resume below, \
+produce a YAML document that exactly follows this schema. Output ONLY valid YAML — \
+no markdown fences, no commentary, no explanation.
+
+Schema:
+```
+personal_information:
+  name: ""
+  surname: ""
+  date_of_birth: ""
+  country: ""
+  city: ""
+  zip_code: ""
+  address: ""
+  phone_prefix: ""
+  phone: ""
+  email: ""
+  github: ""
+  linkedin: ""
+
+education_details:
+  - education_level: ""
+    institution: ""
+    field_of_study: ""
+    final_evaluation_grade: ""
+    start_date: ""
+    year_of_completion: ""
+
+experience_details:
+  - position: ""
+    company: ""
+    employment_period: ""
+    location: ""
+    industry: ""
+    key_responsibilities:
+      - responsibility: ""
+    skills_acquired:
+      - ""
+
+projects:
+  - name: ""
+    description: ""
+    link: ""
+
+achievements:
+  - name: ""
+    description: ""
+
+certifications:
+  - name: ""
+    description: ""
+
+languages:
+  - language: ""
+    proficiency: ""
+
+interests:
+  - ""
+
+availability:
+  notice_period: ""
+
+salary_expectations:
+  salary_range_usd: ""
+
+self_identification:
+  gender: ""
+  pronouns: ""
+  veteran: ""
+  disability: ""
+  ethnicity: ""
+
+legal_authorization:
+  eu_work_authorization: ""
+  us_work_authorization: ""
+  requires_us_visa: ""
+  requires_us_sponsorship: ""
+  requires_eu_visa: ""
+  legally_allowed_to_work_in_eu: ""
+  legally_allowed_to_work_in_us: ""
+  requires_eu_sponsorship: ""
+  canada_work_authorization: ""
+  requires_canada_visa: ""
+  legally_allowed_to_work_in_canada: ""
+  requires_canada_sponsorship: ""
+  uk_work_authorization: ""
+  requires_uk_visa: ""
+  legally_allowed_to_work_in_uk: ""
+  requires_uk_sponsorship: ""
+
+work_preferences:
+  remote_work: ""
+  in_person_work: ""
+  open_to_relocation: ""
+  willing_to_complete_assessments: ""
+  willing_to_undergo_drug_tests: ""
+  willing_to_undergo_background_checks: ""
+```
+
+Rules:
+- Fill in every field you can find evidence for in the resume text.
+- For fields not found in the resume, use an empty string "".
+- For education_details, experience_details, projects, achievements, certifications, and languages, include all entries found.
+- For URLs (github, linkedin), include only if explicitly present in the text.
+- phone_prefix should be the international dialing code (e.g. "+1", "+44").
+- employment_period format: "MM/YYYY - MM/YYYY" or "MM/YYYY - Present".
+- year_of_completion should be an integer year.
+- Keep self_identification and legal_authorization fields as empty strings unless explicitly stated.
+- Do NOT invent or hallucinate information that is not in the resume text.
+
+After the YAML, on a new line output exactly one line starting with "INFERRED_PREFERENCES:" followed by a JSON object \
+with keys "positions" (list of job titles this person would target) and "locations" (list of cities/countries from their experience). \
+Base these ONLY on evidence in the resume. Example:
+INFERRED_PREFERENCES:{{"positions":["Software Engineer","Backend Developer"],"locations":["San Francisco","USA"]}}
+
+Resume text:
+{pdf_text}"""
+
+
+def _parse_cv_with_llm(pdf_text: str, api_key: str) -> tuple[str, dict]:
+    """Send extracted CV text to LLM and return (resume_yaml, inferred_preferences)."""
+    import json
+    import config as cfg
+    from src.libs.resume_and_cover_builder.llm.llm_factory import create_chat_model
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.output_parsers import StrOutputParser
+
+    llm = create_chat_model(api_key)
+    prompt = ChatPromptTemplate.from_template(_CV_PARSE_PROMPT)
+    chain = prompt | llm | StrOutputParser()
+    raw_output = chain.invoke({"pdf_text": pdf_text})
+
+    # Split YAML from inferred preferences line
+    resume_yaml = raw_output
+    inferred = {"positions": [], "locations": []}
+
+    lines = raw_output.strip().split("\n")
+    yaml_lines = []
+    for line in lines:
+        if line.startswith("INFERRED_PREFERENCES:"):
+            try:
+                inferred = json.loads(line[len("INFERRED_PREFERENCES:"):].strip())
+            except (json.JSONDecodeError, ValueError):
+                pass
+        else:
+            yaml_lines.append(line)
+
+    resume_yaml = "\n".join(yaml_lines).strip()
+
+    # Strip markdown fences if the LLM added them despite instructions
+    if resume_yaml.startswith("```"):
+        first_newline = resume_yaml.index("\n") if "\n" in resume_yaml else 3
+        resume_yaml = resume_yaml[first_newline + 1:]
+    if resume_yaml.endswith("```"):
+        resume_yaml = resume_yaml[:-3].rstrip()
+
+    return resume_yaml, inferred
+
+
+@app.post("/api/resume/upload-pdf")
+async def upload_pdf_resume(
+    file: UploadFile = File(...),
+    llm_api_key: str = Form(""),
+    llm_model_type: str = Form("claude"),
+    llm_model: str = Form("claude-sonnet-4-6"),
+):
+    """Upload a PDF resume, extract text, and use LLM to generate resume YAML."""
+    import config as cfg
+
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Please upload a PDF file.")
+
+    # Resolve API key
+    api_key = llm_api_key or cfg.LLM_API_KEY
+    if not api_key:
+        raise HTTPException(
+            status_code=400,
+            detail="LLM API key is required. Configure it in Step 1 or set the LLM_API_KEY environment variable.",
+        )
+
+    # Apply model settings
+    cfg.LLM_MODEL_TYPE = llm_model_type
+    cfg.LLM_MODEL = llm_model
+
+    # Read and extract text from PDF
+    pdf_bytes = await file.read()
+    if len(pdf_bytes) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+    try:
+        pdf_text = await asyncio.to_thread(_extract_text_from_pdf, pdf_bytes)
+    except Exception as e:
+        logger.error(f"PDF text extraction failed: {e}")
+        raise HTTPException(status_code=422, detail=f"Failed to extract text from PDF: {e}")
+
+    if not pdf_text.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="Could not extract any text from the PDF. The file may be image-based or empty.",
+        )
+
+    # Parse with LLM
+    try:
+        resume_yaml, inferred = await asyncio.to_thread(_parse_cv_with_llm, pdf_text, api_key)
+    except Exception as e:
+        logger.error(f"LLM CV parsing failed: {e}")
+        raise HTTPException(status_code=500, detail=f"AI parsing failed: {e}")
+
+    return {
+        "resume_yaml": resume_yaml,
+        "inferred_preferences": inferred,
+    }
 
 
 @app.websocket("/ws/{job_id}")

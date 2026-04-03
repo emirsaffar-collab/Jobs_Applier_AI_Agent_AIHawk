@@ -64,14 +64,20 @@
     <div class="onboarding-panel" id="oPanel2">
       <div class="onboarding-icon">&#128196;</div>
       <div class="onboarding-title">Add Your Resume</div>
-      <div class="onboarding-desc">Upload your resume data in YAML format. You can do this now or later from the <strong>Resume</strong> page. AIHawk uses it to tailor documents for each job.</div>
-      <div class="alert alert-info show" style="display:flex;margin-bottom:16px">
+      <div class="onboarding-desc">Upload your existing CV/resume as a <strong>PDF</strong> and AI will automatically extract your information. Or skip and enter it manually later.</div>
+      <div class="form-group" style="margin-bottom:12px">
+        <label class="form-label">Upload PDF Resume</label>
+        <input type="file" id="onboardingPdfFile" accept=".pdf" class="form-input" style="padding:8px" />
+      </div>
+      <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="uploadPdfResume('onboarding')" id="onboardingUploadBtn">Upload &amp; Parse CV</button>
+      <div id="onboardingUploadStatus" class="status-msg"></div>
+      <div class="alert alert-info show" style="display:flex;margin-top:12px;margin-bottom:8px">
         <span>&#128161;</span>
-        <span>You can load an example resume from the Resume page to get started quickly.</span>
+        <span>Your PDF will be parsed by AI to auto-fill all resume fields. You can review and edit the result on the Resume page.</span>
       </div>
       <div class="onboarding-nav">
         <button class="btn btn-ghost" onclick="oBack(2)">&#8592; Back</button>
-        <button class="btn btn-ghost" onclick="oSkipToResume()">Go to Resume Page</button>
+        <button class="btn btn-ghost" onclick="oSkipToResume()">Enter Manually</button>
         <button class="btn btn-primary" onclick="oNext(2)">Skip for Now &#8594;</button>
       </div>
     </div>
@@ -239,6 +245,15 @@
           </div>
         </div>
         <div>
+          <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><h2>&#128196; Upload PDF Resume</h2></div>
+            <div class="card-body" style="display:flex;flex-direction:column;gap:12px">
+              <p style="font-size:13px;color:var(--muted);margin:0">Upload your existing CV/resume as a PDF. AI will extract your information and generate the YAML automatically.</p>
+              <input type="file" id="resumePdfFile" accept=".pdf" class="form-input" style="padding:8px" />
+              <button class="btn btn-primary" onclick="uploadPdfResume('resume')" id="resumeUploadBtn">Upload &amp; Parse PDF</button>
+              <div id="resumeUploadStatus" class="status-msg"></div>
+            </div>
+          </div>
           <div class="card" style="margin-bottom:16px">
             <div class="card-header"><h2>&#8505;&#65039; Resume Tips</h2></div>
             <div class="card-body" style="font-size:13px;color:var(--muted);line-height:1.8">
