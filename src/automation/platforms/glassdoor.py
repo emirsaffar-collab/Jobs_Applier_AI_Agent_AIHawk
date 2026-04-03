@@ -127,8 +127,8 @@ class GlassdoorPlatform(BasePlatform):
                     if file_input:
                         await file_input.set_input_files(resume_path)
                         await self._human_delay(1, 2)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Glassdoor resume upload error: {}", exc)
 
             # Click through up to 8 steps
             for _ in range(8):

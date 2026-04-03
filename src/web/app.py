@@ -566,8 +566,19 @@ async def index():
 
 @app.get("/api/health")
 async def health():
-    """Health check endpoint."""
-    return {"status": "ok", "version": "1.0.0"}
+    """Health check endpoint. Also reports which required data_folder files are missing."""
+    required_files = {
+        "plain_text_resume.yaml": Path("data_folder/plain_text_resume.yaml"),
+        "work_preferences.yaml": Path("data_folder/work_preferences.yaml"),
+        "secrets.yaml": Path("data_folder/secrets.yaml"),
+    }
+    missing = [name for name, path in required_files.items() if not path.exists()]
+    return {
+        "status": "ok",
+        "version": "1.0.0",
+        "data_folder_ready": len(missing) == 0,
+        "missing_files": missing,
+    }
 
 
 @app.get("/api/styles")

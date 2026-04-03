@@ -33,9 +33,6 @@ from src.utils.constants import (
     SECRETS_YAML,
     WORK_PREFERENCES_YAML,
 )
-# from ai_hawk.bot_facade import AIHawkBotFacade
-# from ai_hawk.job_manager import AIHawkJobManager
-# from ai_hawk.llm.llm_manager import GPTAnswerer
 
 
 class ConfigError(Exception):

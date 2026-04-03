@@ -330,11 +330,7 @@ class BotManager:
         cfg.LLM_MODEL = config.llm_model
 
         from src.libs.llm_manager import AIAdapter
-        return AIAdapter(
-            model_type=config.llm_model_type,
-            model=config.llm_model,
-            api_key=config.llm_api_key,
-        )
+        return AIAdapter(config={}, api_key=config.llm_api_key)
 
     @staticmethod
     def _load_resume() -> str:

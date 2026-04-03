@@ -115,8 +115,8 @@ class UniversalPlatform(BasePlatform):
                         await self._human_delay(0.5, 1.0)
                         filled_any = True
                         break
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("Universal resume upload error: {}", exc)
 
         # Text inputs
         try:
@@ -150,8 +150,8 @@ class UniversalPlatform(BasePlatform):
                 try:
                     await sel.select_option(label=best)
                     filled_any = True
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Universal select_option error: {}", exc)
         except Exception as exc:
             logger.debug("Universal select fill error: {}", exc)
 

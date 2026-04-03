@@ -1083,6 +1083,8 @@ interests:
             const apiKey = document.getElementById('bot-api-key').value.trim();
             const llmType = document.getElementById('bot-llm-type').value;
             if (!apiKey && llmType !== 'ollama') { alert('Please enter your LLM API key.'); return; }
+            const maxApps = parseInt(document.getElementById('bot-max-apps').value) || 50;
+            if (!confirm(`Start the bot on ${platforms.join(', ')}? It will apply to up to ${maxApps} jobs automatically.`)) return;
 
             const body = {
                 platforms,
@@ -1203,8 +1205,16 @@ interests:
             try {
                 const res = await fetch('/api/health');
                 if (res.ok) {
+                    const data = await res.json();
                     badge.className = 'badge badge-success';
                     badge.textContent = 'Connected';
+                    if (!data.data_folder_ready && data.missing_files && data.missing_files.length > 0) {
+                        const box = document.getElementById('alertBox');
+                        box.className = 'alert alert-warning show';
+                        box.innerHTML = '<strong>Setup required:</strong> Missing files in <code>data_folder/</code>: '
+                            + data.missing_files.join(', ')
+                            + '. Copy from <code>data_folder_example/</code> and fill in your details.';
+                    }
                 } else {
                     badge.className = 'badge badge-danger';
                     badge.textContent = 'Error';

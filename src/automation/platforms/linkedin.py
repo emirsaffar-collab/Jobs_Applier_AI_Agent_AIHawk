@@ -209,8 +209,8 @@ class LinkedInPlatform(BasePlatform):
             if el:
                 text = (await el.text_content() or "").lower()
                 return "applied" in text
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("LinkedIn _already_applied check error: {}", exc)
         return False
 
     def _build_search_url(self, position: str, location: str, prefs: dict) -> str:
@@ -279,8 +279,8 @@ class LinkedInPlatform(BasePlatform):
                     for _ in range(3):
                         await page.keyboard.press("End")
                         await asyncio.sleep(0.8)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LinkedIn scroll error: {}", exc)
 
             # Collect job tiles
             items = await page.query_selector_all(_SEL["job_item"])
@@ -349,8 +349,8 @@ class LinkedInPlatform(BasePlatform):
             desc_el = await page.query_selector(".jobs-description__content")
             if desc_el:
                 return (await desc_el.text_content() or "").strip()
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug("LinkedIn get_job_description error: {}", exc)
         return ""
 
     async def _handle_application_modal(
@@ -378,8 +378,8 @@ class LinkedInPlatform(BasePlatform):
                 follow = await page.query_selector(_SEL["follow_checkbox"])
                 if follow:
                     await follow.click()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LinkedIn unfollow checkbox error: {}", exc)
 
             # Determine which button to click
             submit_btn = await page.query_selector(_SEL["submit_btn"])
@@ -409,8 +409,8 @@ class LinkedInPlatform(BasePlatform):
                     await primary.click()
                     step += 1
                     continue
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LinkedIn primary button click error: {}", exc)
 
             # Stuck — close modal and skip
             try:
@@ -421,8 +421,8 @@ class LinkedInPlatform(BasePlatform):
                     discard = await page.query_selector("button[data-control-name='discard_native_overlay']")
                     if discard:
                         await discard.click()
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.debug("LinkedIn close modal error: {}", exc)
             return ApplyResult(skipped=True, reason="stuck on step")
 
         return ApplyResult(skipped=True, reason="exceeded max steps")

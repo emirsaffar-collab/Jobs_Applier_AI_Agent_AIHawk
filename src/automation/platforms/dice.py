@@ -127,8 +127,8 @@ class DicePlatform(BasePlatform):
                     if file_input:
                         await file_input.set_input_files(resume_path)
                         await self._human_delay(1, 2)
-                except Exception:
-                    pass
+                except Exception as exc:
+                    logger.debug("Dice resume upload error: {}", exc)
 
             for _ in range(6):
                 await self._human_delay(1, 2)
