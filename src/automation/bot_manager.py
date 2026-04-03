@@ -28,6 +28,18 @@ class BotConfig:
     max_applications: int = 50
     headless: bool = True
     generate_tailored_resume: bool = False
+    # CAPTCHA solving
+    capsolver_api_key: str = ""
+    # Proxy rotation
+    proxies: list[str] = field(default_factory=list)
+    # Recruiter outreach
+    recruiter_outreach_enabled: bool = False
+    recruiter_outreach_daily_limit: int = 20
+    recruiter_outreach_style: str = "professional"
+    # Per-platform rate limits
+    rate_limits: dict[str, int] = field(default_factory=dict)
+    rate_limit_default: int = 80
+    rate_limit_cooldown_minutes: float = 5.0
 
 
 class BotManager:
@@ -154,10 +166,19 @@ class BotManager:
         from src.automation.browser import BrowserManager
         from src.automation.application_tracker import ApplicationTracker
         from src.automation.job_ranker import JobRanker
+        from src.automation.rate_limiter import RateLimiter
+        from src.automation.recruiter_outreach import RecruiterOutreach
         from src.automation.platforms import get_platform
+        from src.utils.captcha_solver import CaptchaSolver
 
-        browser = BrowserManager(headless=config.headless)
+        browser = BrowserManager(headless=config.headless, proxies=config.proxies)
         tracker = ApplicationTracker()
+        captcha_solver = CaptchaSolver(api_key=config.capsolver_api_key)
+        rate_limiter = RateLimiter(
+            limits=config.rate_limits,
+            default_limit=config.rate_limit_default,
+            cooldown_minutes=config.rate_limit_cooldown_minutes,
+        )
 
         # Build LLM model for ranking
         try:
@@ -171,6 +192,25 @@ class BotManager:
         resume_text = self._load_resume()
         ranker = JobRanker(llm, resume_text)
 
+        # Recruiter outreach
+        outreach: RecruiterOutreach | None = None
+        if config.recruiter_outreach_enabled:
+            outreach = RecruiterOutreach(
+                llm=llm,
+                daily_limit=config.recruiter_outreach_daily_limit,
+                message_style=config.recruiter_outreach_style,
+            )
+            self._log("Recruiter outreach enabled (limit={}/day, style={})".format(
+                config.recruiter_outreach_daily_limit, config.recruiter_outreach_style
+            ))
+
+        if captcha_solver.enabled:
+            self._log("CAPTCHA solving enabled (CAPSolver).")
+        if config.proxies:
+            self._log(f"Proxy rotation enabled ({len(config.proxies)} proxies).")
+        self._log(f"Rate limiting: {rate_limiter.get_limit('default')}/day default, "
+                   f"{config.rate_limit_cooldown_minutes}min cooldown.")
+
         total_applied = 0
 
         try:
@@ -182,6 +222,12 @@ class BotManager:
                 if total_applied >= config.max_applications:
                     self._log(f"Reached max_applications limit ({config.max_applications}).")
                     break
+
+                # Check per-platform rate limit
+                if not rate_limiter.can_apply(platform_name):
+                    remaining = rate_limiter.remaining(platform_name)
+                    self._log(f"Rate limit reached for {platform_name} ({remaining} remaining). Skipping.")
+                    continue
 
                 self.stats["current_platform"] = platform_name
                 self._log(f"=== Platform: {platform_name} ===")
@@ -280,6 +326,14 @@ class BotManager:
                         except Exception as exc:
                             self._log(f"Resume generation failed: {exc}")
 
+                    # Check per-platform rate limit before each application
+                    if not rate_limiter.can_apply(platform_name):
+                        self._log(f"Rate limit reached for {platform_name}, stopping platform.")
+                        break
+
+                    # Cooldown between applications
+                    await rate_limiter.wait_cooldown(platform_name)
+
                     # Apply
                     try:
                         result = await platform.apply_to_job(
@@ -287,9 +341,24 @@ class BotManager:
                         )
                         if result.get("success"):
                             tracker.mark_applied(url, resume_path, cover_path)
+                            rate_limiter.record_application(platform_name)
                             self.stats["applied"] += 1
                             total_applied += 1
                             self._log(f"Applied: {title} @ {company}")
+
+                            # Recruiter outreach (LinkedIn only, after successful apply)
+                            recruiter_link = job.get("recruiter_link", "") if isinstance(job, dict) else ""
+                            if outreach and recruiter_link and platform_name == "linkedin":
+                                try:
+                                    await outreach.send_referral_message(
+                                        page,
+                                        recruiter_url=recruiter_link,
+                                        job_title=title,
+                                        company=company,
+                                    )
+                                except Exception as out_exc:
+                                    self._log(f"Outreach error: {out_exc}")
+
                         elif result.get("skipped"):
                             tracker.mark_skipped(url, result.get("reason", "skipped"))
                             self.stats["skipped"] += 1
@@ -298,6 +367,15 @@ class BotManager:
                             tracker.mark_failed(url, result.get("reason", "unknown"))
                             self.stats["failed"] += 1
                             self._log(f"Failed: {title} — {result.get('reason', '')}")
+
+                            # Check if failure might be CAPTCHA-related
+                            reason = result.get("reason", "").lower()
+                            if captcha_solver.enabled and ("captcha" in reason or "verify" in reason):
+                                from src.utils.captcha_solver import detect_and_solve_captcha
+                                solved = await detect_and_solve_captcha(page, captcha_solver)
+                                if solved:
+                                    self._log("CAPTCHA solved — retrying application.")
+
                     except Exception as exc:
                         tracker.mark_failed(url, str(exc))
                         self.stats["failed"] += 1
@@ -309,10 +387,25 @@ class BotManager:
             self._log(f"Bot crashed: {exc}")
             logger.exception("Bot loop crashed")
         finally:
+            await captcha_solver.close()
             await browser.close()
             self.status = "idle"
             self.stats["current_platform"] = ""
             self.stats["current_job"] = ""
+
+            # Log rate limiter stats
+            rl_stats = rate_limiter.get_stats()
+            if rl_stats:
+                for plat, info in rl_stats.items():
+                    self._log(f"  {plat}: {info['applied_24h']}/{info['limit']} applications (24h)")
+
+            # Log outreach stats
+            if outreach:
+                self._log(
+                    f"Outreach: sent={outreach.stats.sent}, "
+                    f"skipped={outreach.stats.skipped}, failed={outreach.stats.failed}"
+                )
+
             self._log(
                 f"Bot finished. Applied: {self.stats['applied']}, "
                 f"Skipped: {self.stats['skipped']}, Failed: {self.stats['failed']}"

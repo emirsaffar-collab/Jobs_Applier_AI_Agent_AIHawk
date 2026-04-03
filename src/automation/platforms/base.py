@@ -76,6 +76,18 @@ class BasePlatform(ABC):
         """Wait a random amount to appear more human."""
         await asyncio.sleep(random.uniform(lo, hi))
 
+    async def _check_and_solve_captcha(self, page: Page) -> bool:
+        """Detect and solve CAPTCHAs on the current page. Returns True if solved."""
+        try:
+            from src.utils.captcha_solver import CaptchaSolver, detect_and_solve_captcha
+            import config as cfg
+            if cfg.CAPSOLVER_API_KEY:
+                solver = CaptchaSolver(api_key=cfg.CAPSOLVER_API_KEY)
+                return await detect_and_solve_captcha(page, solver)
+        except Exception:
+            pass
+        return False
+
     async def _answer_text_field(self, page: Page, selector: str, question: str) -> None:
         """Use LLM to answer a free-text application question."""
         if self._llm is None:

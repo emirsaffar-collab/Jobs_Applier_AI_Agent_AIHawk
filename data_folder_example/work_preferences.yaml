@@ -46,3 +46,22 @@ title_blacklist:
 location_blacklist:
   - Brazil
 
+# --- Recruiter Outreach ---
+# Send personalised messages to recruiters/hiring managers after applying (LinkedIn only).
+recruiter_outreach:
+  enabled: false
+  daily_limit: 20
+  message_style: "professional"   # professional | casual | brief
+
+# --- Per-Platform Rate Limits ---
+# Maximum applications per 24-hour window per platform.
+# Keeps you under detection thresholds. Missing platforms use 'default'.
+rate_limits:
+  linkedin: 100
+  indeed: 80
+  glassdoor: 50
+  ziprecruiter: 60
+  dice: 60
+  default: 80
+  cooldown_minutes: 5   # minimum pause between applications (minutes)
+
