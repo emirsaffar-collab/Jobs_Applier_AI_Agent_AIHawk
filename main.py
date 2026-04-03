@@ -524,8 +524,104 @@ def prompt_user_action() -> str:
         return ""
 
 
+def run_web_server(host: str = "0.0.0.0", port: int = 8000, reload: bool = False) -> None:
+    """Start the FastAPI web server.
+
+    Parameters
+    ----------
+    host:
+        Network interface to bind (default ``0.0.0.0``).
+    port:
+        TCP port to listen on (default ``8000``).
+    reload:
+        Enable uvicorn auto-reload for development.
+    """
+    try:
+        import uvicorn
+    except ImportError:
+        logger.error(
+            "uvicorn is not installed. Install it with: pip install uvicorn[standard]"
+        )
+        raise SystemExit(1)
+
+    logger.info(f"Starting AIHawk web server on http://{host}:{port}")
+    logger.info("API docs available at http://{}:{}/docs", host, port)
+
+    from src.web.app import create_app
+
+    uvicorn.run(
+        create_app(),
+        host=host,
+        port=port,
+        reload=reload,
+        log_level="info",
+    )
+
+
 def main():
-    """Main entry point for the AIHawk Job Application Bot."""
+    """Main entry point for the AIHawk Job Application Bot.
+
+    Supports two modes:
+    - **CLI mode** (default): interactive terminal prompts for document generation.
+    - **Web mode** (``--web``): starts a FastAPI server with async task queue,
+      SQLite persistence, and progress tracking.
+
+    Examples
+    --------
+    CLI mode (original behaviour)::
+
+        python main.py
+
+    Web server mode::
+
+        python main.py --web
+        python main.py --web --host 127.0.0.1 --port 8080
+    """
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="AIHawk Job Application Bot",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  python main.py                        # interactive CLI\n"
+            "  python main.py --web                  # web server on :8000\n"
+            "  python main.py --web --port 8080      # web server on :8080\n"
+        ),
+    )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        default=False,
+        help="Start the FastAPI web server instead of the interactive CLI.",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Host to bind the web server to (default: 0.0.0.0).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port for the web server (default: 8000).",
+    )
+    parser.add_argument(
+        "--reload",
+        action="store_true",
+        default=False,
+        help="Enable uvicorn auto-reload (development only).",
+    )
+
+    args = parser.parse_args()
+
+    if args.web:
+        run_web_server(host=args.host, port=args.port, reload=args.reload)
+        return
+
+    # ------------------------------------------------------------------
+    # CLI mode (original behaviour)
+    # ------------------------------------------------------------------
     try:
         # Define and validate the data folder
         data_folder = Path("data_folder")

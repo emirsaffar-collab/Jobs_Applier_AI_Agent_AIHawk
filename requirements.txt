@@ -29,3 +29,13 @@ pytest
 pytest-mock
 pytest-cov
 undetected-chromedriver==3.5.5
+
+# Web server
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+
+# Database
+SQLAlchemy>=2.0.0
+
+# Background task queue
+APScheduler>=3.10.0
