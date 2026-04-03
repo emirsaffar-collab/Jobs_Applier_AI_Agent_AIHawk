@@ -82,9 +82,23 @@ manager = ConnectionManager()
 
 def _get_available_styles() -> dict:
     """Get available resume styles from the styles directory."""
-    from src.libs.resume_and_cover_builder.style_manager import StyleManager
-    sm = StyleManager()
-    return sm.get_styles()
+    styles_dir = Path(__file__).resolve().parent.parent / "libs" / "resume_and_cover_builder" / "resume_style"
+    styles = {}
+    if not styles_dir.is_dir():
+        return styles
+    for file_path in styles_dir.iterdir():
+        if file_path.is_file() and file_path.suffix == ".css":
+            try:
+                with file_path.open("r", encoding="utf-8") as f:
+                    first_line = f.readline().strip()
+                    if first_line.startswith("/*") and first_line.endswith("*/"):
+                        content = first_line[2:-2].strip()
+                        if "$" in content:
+                            style_name, author_link = content.split("$", 1)
+                            styles[style_name.strip()] = (file_path.name, author_link.strip())
+            except Exception:
+                continue
+    return styles
 
 
 def _validate_resume_yaml(yaml_str: str) -> bool:
