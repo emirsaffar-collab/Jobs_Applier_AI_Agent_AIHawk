@@ -1,7 +1,6 @@
 remote: true
-hybrid: true
-onsite: true
-
+hybrid: false
+onsite: false
 experience_level:
   internship: false
   entry: true
@@ -9,7 +8,6 @@ experience_level:
   mid_senior_level: true
   director: false
   executive: false
-
 job_types:
   full_time: true
   contract: false
@@ -18,30 +16,15 @@ job_types:
   internship: false
   other: false
   volunteer: true
-
 date:
   all_time: false
   month: false
   week: false
   24_hours: true
-
-positions:
-  - Software engineer
-
-locations:
-  - Germany
-
+positions: []
+locations: []
 apply_once_at_company: true
-
-distance: 100
-
-company_blacklist:
-  - wayfair
-  - Crossover
-
-title_blacklist:
-  - word1
-  - word2
-
-location_blacklist:
-  - Brazil
+distance: 0
+company_blacklist: []
+title_blacklist: []
+location_blacklist: []
