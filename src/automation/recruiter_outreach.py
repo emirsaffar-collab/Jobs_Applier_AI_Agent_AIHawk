@@ -206,7 +206,10 @@ class RecruiterOutreach:
             f"Sign off with just a first name{f': {candidate_name.split()[0]}' if candidate_name else ''}."
         )
         try:
-            return self._llm.invoke(prompt).strip()
+            result = self._llm.invoke(prompt)
+            if hasattr(result, "content"):
+                result = result.content
+            return str(result).strip()
         except Exception as exc:
             logger.debug("LLM outreach message generation failed: {}", exc)
             return self._fallback_message(job_title, company, candidate_name)

@@ -219,79 +219,55 @@ class LLMLogger:
 
     @staticmethod
     def log_request(prompts, parsed_reply: Dict[str, Dict]):
-        logger.debug("Starting log_request method")
-        logger.debug(f"Prompts received: {prompts}")
-        logger.debug(f"Parsed reply received: {parsed_reply}")
-
         try:
             calls_log = os.path.join(Path("data_folder/output"), "open_ai_calls.json")
-            logger.debug(f"Logging path determined: {calls_log}")
         except Exception as e:
             logger.error(f"Error determining the log path: {str(e)}")
             raise
 
         if isinstance(prompts, StringPromptValue):
-            logger.debug("Prompts are of type StringPromptValue")
             prompts = prompts.text
-            logger.debug(f"Prompts converted to text: {prompts}")
-        elif isinstance(prompts, Dict):
-            logger.debug("Prompts are of type Dict")
+        elif hasattr(prompts, "messages"):
             try:
                 prompts = {
                     f"prompt_{i + 1}": prompt.content
                     for i, prompt in enumerate(prompts.messages)
                 }
-                logger.debug(f"Prompts converted to dictionary: {prompts}")
             except Exception as e:
-                logger.error(f"Error converting prompts to dictionary: {str(e)}")
-                raise
-        else:
-            logger.debug("Prompts are of unknown type, attempting default conversion")
-            try:
-                prompts = {
-                    f"prompt_{i + 1}": prompt.content
-                    for i, prompt in enumerate(prompts.messages)
-                }
-                logger.debug(
-                    f"Prompts converted to dictionary using default method: {prompts}"
-                )
-            except Exception as e:
-                logger.error(f"Error converting prompts using default method: {str(e)}")
+                logger.error(f"Error converting prompts: {str(e)}")
                 raise
 
-        try:
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            logger.debug(f"Current time obtained: {current_time}")
-        except Exception as e:
-            logger.error(f"Error obtaining current time: {str(e)}")
-            raise
+        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         try:
             token_usage = parsed_reply[USAGE_METADATA]
             output_tokens = token_usage[OUTPUT_TOKENS]
             input_tokens = token_usage[INPUT_TOKENS]
             total_tokens = token_usage[TOTAL_TOKENS]
-            logger.debug(
-                f"Token usage - Input: {input_tokens}, Output: {output_tokens}, Total: {total_tokens}"
-            )
         except KeyError as e:
             logger.error(f"KeyError in parsed_reply structure: {str(e)}")
             raise
 
         try:
             model_name = parsed_reply[RESPONSE_METADATA][MODEL_NAME]
-            logger.debug(f"Model name: {model_name}")
         except KeyError as e:
             logger.error(f"KeyError in response_metadata: {str(e)}")
             raise
 
         try:
-            prompt_price_per_token = 0.00000015
-            completion_price_per_token = 0.0000006
-            total_cost = (input_tokens * prompt_price_per_token) + (
-                output_tokens * completion_price_per_token
-            )
-            logger.debug(f"Total cost calculated: {total_cost}")
+            # Per-model pricing (per token). Defaults are conservative estimates.
+            MODEL_PRICING = {
+                "gpt-3.5-turbo": (0.0000005, 0.0000015),
+                "gpt-4": (0.00003, 0.00006),
+                "gpt-4o": (0.0000025, 0.00001),
+                "gpt-4o-mini": (0.00000015, 0.0000006),
+                "claude-sonnet-4-6": (0.000003, 0.000015),
+                "claude-opus-4-6": (0.000015, 0.000075),
+                "claude-haiku-4-5-20251001": (0.0000008, 0.000004),
+            }
+            default_pricing = (0.000001, 0.000002)
+            prompt_price, completion_price = MODEL_PRICING.get(model_name, default_pricing)
+            total_cost = (input_tokens * prompt_price) + (output_tokens * completion_price)
         except Exception as e:
             logger.error(f"Error calculating total cost: {str(e)}")
             raise
@@ -307,18 +283,14 @@ class LLMLogger:
                 OUTPUT_TOKENS: output_tokens,
                 TOTAL_COST: total_cost,
             }
-            logger.debug(f"Log entry created: {log_entry}")
         except KeyError as e:
-            logger.error(
-                f"Error creating log entry: missing key {str(e)} in parsed_reply"
-            )
+            logger.error(f"Error creating log entry: missing key {str(e)}")
             raise
 
         try:
             with open(calls_log, "a", encoding="utf-8") as f:
                 json_string = json.dumps(log_entry, ensure_ascii=False, indent=4)
                 f.write(json_string + "\n")
-                logger.debug(f"Log entry written to file: {calls_log}")
         except Exception as e:
             logger.error(f"Error writing log entry to file: {str(e)}")
             raise
@@ -329,60 +301,49 @@ class LoggerChatModel:
         self.llm = llm
         logger.debug(f"LoggerChatModel successfully initialized with LLM: {llm}")
 
-    def __call__(self, messages: List[Dict[str, str]]) -> str:
-        logger.debug(f"Entering __call__ method with messages: {messages}")
-        while True:
+    def __call__(self, messages: List[Dict[str, str]], max_retries: int = 5) -> str:
+        logger.debug(f"Entering __call__ method with messages")
+        retries = 0
+        while retries < max_retries:
             try:
-                logger.debug("Attempting to call the LLM with messages")
-
                 reply = self.llm.invoke(messages)
-                logger.debug(f"LLM response received: {reply}")
 
                 parsed_reply = self.parse_llmresult(reply)
-                logger.debug(f"Parsed LLM reply: {parsed_reply}")
-
                 LLMLogger.log_request(prompts=messages, parsed_reply=parsed_reply)
-                logger.debug("Request successfully logged")
 
                 return reply
 
             except httpx.HTTPStatusError as e:
-                logger.error(f"HTTPStatusError encountered: {str(e)}")
+                retries += 1
                 if e.response.status_code == 429:
                     retry_after = e.response.headers.get("retry-after")
                     retry_after_ms = e.response.headers.get("retry-after-ms")
 
                     if retry_after:
                         wait_time = int(retry_after)
-                        logger.warning(
-                            f"Rate limit exceeded. Waiting for {wait_time} seconds before retrying (extracted from 'retry-after' header)..."
-                        )
-                        time.sleep(wait_time)
                     elif retry_after_ms:
                         wait_time = int(retry_after_ms) / 1000.0
-                        logger.warning(
-                            f"Rate limit exceeded. Waiting for {wait_time} seconds before retrying (extracted from 'retry-after-ms' header)..."
-                        )
-                        time.sleep(wait_time)
                     else:
                         wait_time = 30
-                        logger.warning(
-                            f"'retry-after' header not found. Waiting for {wait_time} seconds before retrying (default)..."
-                        )
-                        time.sleep(wait_time)
+
+                    logger.warning(
+                        f"Rate limit exceeded. Waiting {wait_time}s before retry {retries}/{max_retries}..."
+                    )
+                    time.sleep(wait_time)
                 else:
                     logger.error(
-                        f"HTTP error occurred with status code: {e.response.status_code}, waiting 30 seconds before retrying"
+                        f"HTTP error {e.response.status_code}, retry {retries}/{max_retries}, waiting 30s..."
                     )
                     time.sleep(30)
 
             except Exception as e:
-                logger.error(f"Unexpected error occurred: {str(e)}")
-                logger.info(
-                    "Waiting for 30 seconds before retrying due to an unexpected error."
+                retries += 1
+                logger.error(
+                    f"LLM error: {e}, retry {retries}/{max_retries}, waiting 30s..."
                 )
                 time.sleep(30)
-                continue
+
+        raise RuntimeError(f"LLM call failed after {max_retries} retries")
 
     def parse_llmresult(self, llmresult: AIMessage) -> Dict[str, Dict]:
         logger.debug(f"Parsing LLM result: {llmresult}")
@@ -608,7 +569,7 @@ class GPTAnswerer:
         return output
 
     def answer_question_numeric(
-        self, question: str, default_experience: str = 3
+        self, question: str, default_experience: int = 3
     ) -> str:
         logger.debug(f"Answering numeric question: {question}")
         func_template = self._preprocess_template_string(

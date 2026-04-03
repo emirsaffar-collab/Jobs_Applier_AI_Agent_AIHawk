@@ -1,7 +1,7 @@
 # In this file, you can set the configurations of the app.
 
 import os
-from src.utils.constants import DEBUG, ERROR, LLM_MODEL, OPENAI
+from src.utils.constants import ERROR
 
 #config related to logging must have prefix LOG_
 LOG_LEVEL = os.environ.get('LOG_LEVEL', 'ERROR')

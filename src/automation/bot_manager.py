@@ -274,10 +274,10 @@ class BotManager:
                     # Respect pause
                     await self._pause_event.wait()
 
-                    company = job.get("company", "")
-                    title = job.get("title", "")
-                    url = job.get("url", "")
-                    description = job.get("description", "")
+                    company = job.company if hasattr(job, "company") else job.get("company", "")
+                    title = job.title if hasattr(job, "title") else job.get("title", "")
+                    url = job.url if hasattr(job, "url") else job.get("url", "")
+                    description = job.description if hasattr(job, "description") else job.get("description", "")
                     self.stats["current_job"] = f"{title} @ {company}"
 
                     # Skip already seen URLs
@@ -339,7 +339,11 @@ class BotManager:
                         result = await platform.apply_to_job(
                             page, job, resume_path=resume_path, cover_letter_path=cover_path
                         )
-                        if result.get("success"):
+                        result_success = result.success if hasattr(result, "success") else result.get("success")
+                        result_skipped = result.skipped if hasattr(result, "skipped") else result.get("skipped")
+                        result_reason = result.reason if hasattr(result, "reason") else result.get("reason", "")
+
+                        if result_success:
                             tracker.mark_applied(url, resume_path, cover_path)
                             rate_limiter.record_application(platform_name)
                             self.stats["applied"] += 1
@@ -347,7 +351,7 @@ class BotManager:
                             self._log(f"Applied: {title} @ {company}")
 
                             # Recruiter outreach (LinkedIn only, after successful apply)
-                            recruiter_link = job.get("recruiter_link", "") if isinstance(job, dict) else ""
+                            recruiter_link = getattr(job, "extra", {}).get("recruiter_link", "") if hasattr(job, "extra") else (job.get("recruiter_link", "") if isinstance(job, dict) else "")
                             if outreach and recruiter_link and platform_name == "linkedin":
                                 try:
                                     await outreach.send_referral_message(
@@ -359,17 +363,17 @@ class BotManager:
                                 except Exception as out_exc:
                                     self._log(f"Outreach error: {out_exc}")
 
-                        elif result.get("skipped"):
-                            tracker.mark_skipped(url, result.get("reason", "skipped"))
+                        elif result_skipped:
+                            tracker.mark_skipped(url, result_reason or "skipped")
                             self.stats["skipped"] += 1
-                            self._log(f"Skipped: {title} — {result.get('reason', '')}")
+                            self._log(f"Skipped: {title} — {result_reason}")
                         else:
-                            tracker.mark_failed(url, result.get("reason", "unknown"))
+                            tracker.mark_failed(url, result_reason or "unknown")
                             self.stats["failed"] += 1
-                            self._log(f"Failed: {title} — {result.get('reason', '')}")
+                            self._log(f"Failed: {title} — {result_reason}")
 
                             # Check if failure might be CAPTCHA-related
-                            reason = result.get("reason", "").lower()
+                            reason = (result_reason or "").lower()
                             if captcha_solver.enabled and ("captcha" in reason or "verify" in reason):
                                 from src.utils.captcha_solver import detect_and_solve_captcha
                                 solved = await detect_and_solve_captcha(page, captcha_solver)
@@ -417,13 +421,22 @@ class BotManager:
 
     @staticmethod
     def _build_llm(config: BotConfig):
-        """Build an AIModel instance from the bot config."""
-        import config as cfg
-        cfg.LLM_MODEL_TYPE = config.llm_model_type
-        cfg.LLM_MODEL = config.llm_model
+        """Build an AIModel instance from the bot config.
 
-        from src.libs.llm_manager import AIAdapter
-        return AIAdapter(config={}, api_key=config.llm_api_key)
+        Sets the global config temporarily for AIAdapter, which reads
+        cfg.LLM_MODEL_TYPE / cfg.LLM_MODEL during initialization.
+        """
+        import config as cfg
+        # Store originals to restore after initialization
+        orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
+        try:
+            cfg.LLM_MODEL_TYPE = config.llm_model_type
+            cfg.LLM_MODEL = config.llm_model
+            from src.libs.llm_manager import AIAdapter
+            return AIAdapter(config={}, api_key=config.llm_api_key)
+        finally:
+            cfg.LLM_MODEL_TYPE = orig_type
+            cfg.LLM_MODEL = orig_model
 
     @staticmethod
     def _load_resume() -> str:
@@ -460,10 +473,10 @@ class BotManager:
         # Minimal job context
         from src.job import Job
         j = Job()
-        j.role = job.get("title", "")
-        j.company = job.get("company", "")
-        j.description = job.get("description", "")
-        j.link = job.get("url", "")
+        j.role = job.title if hasattr(job, "title") else job.get("title", "")
+        j.company = job.company if hasattr(job, "company") else job.get("company", "")
+        j.description = job.description if hasattr(job, "description") else job.get("description", "")
+        j.link = job.url if hasattr(job, "url") else job.get("url", "")
         facade.job = j
 
         style_path = style_manager.get_style_path()

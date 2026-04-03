@@ -174,6 +174,11 @@ class BrowserManager:
         cookies = await self._context.cookies()
         path = COOKIES_DIR / f"{platform}.json"
         path.write_text(json.dumps(cookies, indent=2))
+        # Restrict cookie file permissions to owner only (sensitive session data)
+        try:
+            path.chmod(0o600)
+        except OSError:
+            pass  # Windows or other OS without POSIX permissions
         logger.info("Saved {} cookies for {}", len(cookies), platform)
 
     async def load_cookies(self, platform: str) -> bool:

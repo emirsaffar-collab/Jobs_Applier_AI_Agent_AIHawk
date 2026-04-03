@@ -66,6 +66,11 @@ class ApplicationTracker:
                 session_id    TEXT
             )
         """)
+        # Add indexes for common query patterns
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_applications_url ON applications (url)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_applications_company_title ON applications (company, title)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications (status)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_applications_platform ON applications (platform)")
         conn.commit()
         logger.debug("ApplicationTracker DB initialized at {}", self.db_path)
 

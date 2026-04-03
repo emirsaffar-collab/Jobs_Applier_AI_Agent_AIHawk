@@ -96,7 +96,9 @@ class BasePlatform(ABC):
             answer = self._llm.invoke(
                 f"Answer this job application question concisely (1-3 sentences): {question}"
             )
-            await page.fill(selector, answer.strip())
+            if hasattr(answer, "content"):
+                answer = answer.content
+            await page.fill(selector, str(answer).strip())
         except Exception:
             await page.fill(selector, "Yes")
 
@@ -111,6 +113,9 @@ class BasePlatform(ABC):
         else:
             prompt += "\nAnswer concisely (1-2 sentences)."
         try:
-            return self._llm.invoke(prompt).strip()
+            result = self._llm.invoke(prompt)
+            if hasattr(result, "content"):
+                result = result.content
+            return str(result).strip()
         except Exception:
             return options[0] if options else "Yes"

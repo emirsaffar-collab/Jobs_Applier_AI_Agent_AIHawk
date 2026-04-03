@@ -55,6 +55,9 @@ class JobRanker:
         )
         try:
             response = self._llm.invoke(prompt)
+            # Extract text content from LangChain BaseMessage if needed
+            if hasattr(response, "content"):
+                response = response.content
             return self._parse(response)
         except Exception as exc:
             logger.warning("LLM scoring failed for '{}': {}", title, exc)

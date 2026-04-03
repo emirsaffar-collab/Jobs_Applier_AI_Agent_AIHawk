@@ -12,16 +12,59 @@ from pathlib import Path
 from typing import Optional
 
 import yaml
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.logging import logger
 
-app = FastAPI(title="AIHawk Jobs Applier", version="2.0.0")
+# Optional API key authentication — set WEB_API_KEY env var to enable
+_WEB_API_KEY = os.environ.get("WEB_API_KEY", "")
 
-# In-memory job store for generated documents
+
+class _OptionalAuthMiddleware(BaseHTTPMiddleware):
+    """When WEB_API_KEY is set, require it in the Authorization header for API routes.
+
+    Public routes (/, /api/health, /ws/*) are exempt. WebSocket auth is handled
+    separately since middleware cannot intercept WS upgrades reliably.
+    """
+
+    EXEMPT_PATHS = {"/", "/api/health", "/docs", "/openapi.json"}
+
+    async def dispatch(self, request: Request, call_next):
+        if not _WEB_API_KEY:
+            return await call_next(request)
+        path = request.url.path
+        if path in self.EXEMPT_PATHS or path.startswith("/ws/"):
+            return await call_next(request)
+        auth = request.headers.get("Authorization", "")
+        if auth != f"Bearer {_WEB_API_KEY}":
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=401, content={"detail": "Unauthorized. Set Authorization: Bearer <WEB_API_KEY> header."})
+        return await call_next(request)
+
+
+app = FastAPI(title="AIHawk Jobs Applier", version="2.0.0")
+app.add_middleware(_OptionalAuthMiddleware)
+
+# In-memory job store for generated documents (max 100 entries, oldest evicted)
 _jobs: dict = {}
+_MAX_JOBS = 100
+
+
+def _cleanup_jobs() -> None:
+    """Evict oldest completed/failed jobs when the store exceeds _MAX_JOBS."""
+    if len(_jobs) <= _MAX_JOBS:
+        return
+    # Sort by insertion order (dict preserves it in Python 3.7+), remove oldest completed/failed first
+    removable = [
+        jid for jid, j in _jobs.items()
+        if j.get("status") in ("completed", "failed")
+    ]
+    while len(_jobs) > _MAX_JOBS and removable:
+        del _jobs[removable.pop(0)]
+
 
 # Credentials file path
 CREDENTIALS_PATH = Path("data_folder/credentials.yaml")
@@ -640,7 +683,8 @@ async def generate_document(request: GenerateRequest):
     # Ensure data_folder exists for generation artifacts
     DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 
-    # Create job
+    # Create job (evict old entries if needed)
+    _cleanup_jobs()
     job_id = str(uuid.uuid4())
     _jobs[job_id] = {
         "status": "pending",
