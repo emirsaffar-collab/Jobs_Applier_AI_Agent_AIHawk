@@ -56,6 +56,10 @@
         <label class="form-label">Model</label>
         <select class="form-select" id="oModel"></select>
       </div>
+      <div class="form-group ollama-url-group" id="oApiUrlGroup" style="display:none">
+        <label class="form-label">Ollama API URL</label>
+        <input class="form-input" id="oApiUrl" placeholder="http://localhost:11434" />
+      </div>
       <div class="form-group">
         <label class="form-label">API Key</label>
         <input class="form-input" id="oApiKey" type="password" placeholder="sk-&#8230;" />
@@ -445,6 +449,10 @@
                   <select class="form-select" id="llmModel"></select>
                 </div>
               </div>
+              <div class="form-group ollama-url-group" id="llmApiUrlGroup" style="display:none">
+                <label class="form-label">Ollama API URL</label>
+                <input class="form-input" id="llmApiUrl" placeholder="http://localhost:11434" oninput="LS.set('api_url', this.value)" />
+              </div>
               <div class="form-group">
                 <label class="form-label">API Key</label>
                 <input class="form-input" id="llmApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey()" />
@@ -613,6 +621,10 @@
                   <label class="form-label">Model</label>
                   <select class="form-select" id="botModel"></select>
                 </div>
+              </div>
+              <div class="form-group ollama-url-group" id="botApiUrlGroup" style="display:none">
+                <label class="form-label">Ollama API URL</label>
+                <input class="form-input" id="botApiUrl" placeholder="http://localhost:11434" oninput="LS.set('api_url', this.value)" />
               </div>
               <div class="form-group">
                 <label class="form-label">API Key</label>

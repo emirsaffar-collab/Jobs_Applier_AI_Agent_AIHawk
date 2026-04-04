@@ -46,7 +46,9 @@ function saveApiKey() {
 }
 function loadSavedApiKey() {
   const k = LS.get('api_key', ''); const p = LS.get('api_provider', 'claude'); const m = LS.get('api_model', '');
+  const u = LS.get('api_url', '');
   if (k) { setVal('llmApiKey', k); setVal('botApiKey', k); setVal('oApiKey', k); }
+  if (u) { setVal('llmApiUrl', u); setVal('botApiUrl', u); setVal('oApiUrl', u); }
   setVal('llmProvider', p); setVal('botProvider', p); setVal('oProvider', p);
   updateAllModelLists();
   if (m) { setVal('llmModel', m); setVal('botModel', m); setVal('oModel', m); }
@@ -160,6 +162,7 @@ async function uploadPdfResume(source) {
   fd.append('llm_api_key', apiKey);
   fd.append('llm_model_type', provider);
   fd.append('llm_model', LS.get('api_model', '') || DEFAULT_MODELS[provider] || 'claude-sonnet-4-6');
+  fd.append('llm_api_url', LS.get('api_url', '') || '');
   showStatus(statusId, 'Uploading and parsing your CV... This may take a moment.', 'info');
   if (btn) btn.disabled = true;
   try {
@@ -273,6 +276,11 @@ function updateModelList(providerSelectId, modelSelectId) {
   }
   sel.onchange = function() { LS.set('api_model', sel.value); };
   LS.set('api_provider', p);
+  // Show/hide Ollama API URL and toggle API key requirement
+  toggleOllamaFields(p);
+}
+function toggleOllamaFields(provider) {
+  document.querySelectorAll('.ollama-url-group').forEach(el => el.style.display = provider === 'ollama' ? 'block' : 'none');
 }
 function updateAllModelLists() {
   const p = (document.getElementById('llmProvider') || document.getElementById('oProvider') || {}).value || 'claude';
@@ -289,7 +297,8 @@ function selectAction(action) {
 }
 async function startGeneration() {
   const apiKey = document.getElementById('llmApiKey').value.trim();
-  if (!apiKey && !envApiKeyConfigured) { showStatus('genStatus', 'API key is required.', 'error'); return; }
+  const provider = document.getElementById('llmProvider').value;
+  if (!apiKey && !envApiKeyConfigured && provider !== 'ollama') { showStatus('genStatus', 'API key is required.', 'error'); return; }
   const yaml = document.getElementById('genResumeYaml').value.trim();
   if (!yaml)   { showStatus('genStatus', 'Resume YAML is required.', 'error'); return; }
   const btn = document.getElementById('generateBtn');
@@ -301,7 +310,8 @@ async function startGeneration() {
       action: currentAction, resume_yaml: yaml,
       job_url: document.getElementById('jobUrl').value.trim() || null,
       style:   document.getElementById('resumeStyle').value || null,
-      llm_api_key: apiKey, llm_model_type: document.getElementById('llmProvider').value, llm_model: document.getElementById('llmModel').value,
+      llm_api_key: apiKey, llm_model_type: provider, llm_model: document.getElementById('llmModel').value,
+      llm_api_url: document.getElementById('llmApiUrl').value.trim() || '',
     })});
     if (!r.ok) throw new Error(await r.text());
     const d = await r.json(); currentJobId = d.job_id;
@@ -392,11 +402,13 @@ async function saveCredentials() {
 }
 async function botStart() {
   const apiKey = document.getElementById('botApiKey').value.trim();
-  if (!apiKey && !envApiKeyConfigured) { showAlert('botAlert', 'API key is required.', 'danger'); return; }
+  const botProvider = document.getElementById('botProvider').value;
+  if (!apiKey && !envApiKeyConfigured && botProvider !== 'ollama') { showAlert('botAlert', 'API key is required.', 'danger'); return; }
   try {
     const r = await fetch('/api/bot/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
-      platforms: [activePlatform], llm_model_type: document.getElementById('botProvider').value,
+      platforms: [activePlatform], llm_model_type: botProvider,
       llm_model: document.getElementById('botModel').value, llm_api_key: apiKey,
+      llm_api_url: document.getElementById('botApiUrl').value.trim() || '',
       min_score: parseInt(document.getElementById('botMinScore').value || '60', 10),
       max_applications: parseInt(document.getElementById('botMaxApps').value || '50', 10),
       headless: document.getElementById('botHeadless').checked,
@@ -555,9 +567,11 @@ function renderOStep() {
 function oNext(step) {
   if (step === 1) {
     const k = document.getElementById('oApiKey').value.trim(); const p = document.getElementById('oProvider').value; const m = document.getElementById('oModel').value;
-    if (k) {
-      LS.set('api_key', k); LS.set('api_provider', p); LS.set('api_model', m);
-      setVal('llmApiKey', k); setVal('botApiKey', k);
+    const u = document.getElementById('oApiUrl').value.trim();
+    if (k || p === 'ollama') {
+      if (k) { LS.set('api_key', k); setVal('llmApiKey', k); setVal('botApiKey', k); }
+      LS.set('api_provider', p); LS.set('api_model', m);
+      if (u) { LS.set('api_url', u); setVal('llmApiUrl', u); setVal('botApiUrl', u); }
       setVal('llmProvider', p); setVal('botProvider', p);
       updateModelList('llmProvider', 'llmModel'); updateModelList('botProvider', 'botModel');
       setVal('llmModel', m); setVal('botModel', m);

@@ -24,6 +24,7 @@ class BotConfig:
     llm_api_key: str
     llm_model_type: str = "claude"
     llm_model: str = "claude-sonnet-4-6"
+    llm_api_url: str = ""  # For Ollama custom endpoint
     min_score: int = 7
     max_applications: int = 50
     headless: bool = True
@@ -428,15 +429,18 @@ class BotManager:
         """
         import config as cfg
         # Store originals to restore after initialization
-        orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
+        orig_type, orig_model, orig_url = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL, cfg.LLM_API_URL
         try:
             cfg.LLM_MODEL_TYPE = config.llm_model_type
             cfg.LLM_MODEL = config.llm_model
+            if config.llm_api_url:
+                cfg.LLM_API_URL = config.llm_api_url
             from src.libs.llm_manager import AIAdapter
             return AIAdapter(config={}, api_key=config.llm_api_key)
         finally:
             cfg.LLM_MODEL_TYPE = orig_type
             cfg.LLM_MODEL = orig_model
+            cfg.LLM_API_URL = orig_url
 
     @staticmethod
     def _load_resume() -> str:

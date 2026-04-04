@@ -135,6 +135,7 @@ class GenerateRequest(BaseModel):
     llm_api_key: str = ""  # Falls back to LLM_API_KEY env var when empty
     llm_model_type: str = "claude"
     llm_model: str = "claude-sonnet-4-6"
+    llm_api_url: str = ""  # For Ollama custom endpoint
 
 
 class JobStatus(BaseModel):
@@ -399,10 +400,12 @@ async def _run_generation(job_id: str, request: GenerateRequest):
     # Acquire lock so concurrent generation requests don't overwrite each
     # other's global LLM config (the resume builder reads cfg.LLM_MODEL_TYPE).
     async with _generation_lock:
-        orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
+        orig_type, orig_model, orig_url = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL, cfg.LLM_API_URL
         try:
             cfg.LLM_MODEL_TYPE = request.llm_model_type
             cfg.LLM_MODEL = request.llm_model
+            if request.llm_api_url:
+                cfg.LLM_API_URL = request.llm_api_url
 
             _jobs[job_id]["status"] = "running"
             await manager.send_progress(job_id, {
@@ -520,6 +523,7 @@ async def _run_generation(job_id: str, request: GenerateRequest):
         finally:
             cfg.LLM_MODEL_TYPE = orig_type
             cfg.LLM_MODEL = orig_model
+            cfg.LLM_API_URL = orig_url
 
 
 def _generate_with_job_url(resume_facade: "ResumeFacade", request: GenerateRequest):
@@ -768,7 +772,7 @@ async def generate_document(request: GenerateRequest):
     if not request.llm_api_key and cfg.LLM_API_KEY:
         request.llm_api_key = cfg.LLM_API_KEY
 
-    if not request.llm_api_key:
+    if not request.llm_api_key and request.llm_model_type != "ollama":
         raise HTTPException(status_code=400, detail="LLM API key is required. Set LLM_API_KEY env var or provide it in the request.")
 
     if not request.resume_yaml.strip():
@@ -1081,6 +1085,7 @@ async def upload_pdf_resume(
     llm_api_key: str = Form(""),
     llm_model_type: str = Form("claude"),
     llm_model: str = Form("claude-sonnet-4-6"),
+    llm_api_url: str = Form(""),
 ):
     """Upload a PDF resume, extract text, and use LLM to generate resume YAML."""
     import config as cfg
@@ -1090,7 +1095,7 @@ async def upload_pdf_resume(
 
     # Resolve API key
     api_key = llm_api_key or cfg.LLM_API_KEY
-    if not api_key:
+    if not api_key and llm_model_type != "ollama":
         raise HTTPException(
             status_code=400,
             detail="LLM API key is required. Configure it in Step 1 or set the LLM_API_KEY environment variable.",
@@ -1098,15 +1103,18 @@ async def upload_pdf_resume(
 
     # Acquire lock so concurrent requests don't overwrite each other's model config
     async with _generation_lock:
-        orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
+        orig_type, orig_model, orig_url = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL, cfg.LLM_API_URL
         cfg.LLM_MODEL_TYPE = llm_model_type
         cfg.LLM_MODEL = llm_model
+        if llm_api_url:
+            cfg.LLM_API_URL = llm_api_url
 
         try:
             return await _upload_pdf_inner(file, api_key)
         finally:
             cfg.LLM_MODEL_TYPE = orig_type
             cfg.LLM_MODEL = orig_model
+            cfg.LLM_API_URL = orig_url
 
 
 async def _upload_pdf_inner(file: UploadFile, api_key: str):
@@ -1178,6 +1186,7 @@ class BotStartRequest(BaseModel):
     llm_api_key: str = ""  # Falls back to LLM_API_KEY env var when empty
     llm_model_type: str = "claude"
     llm_model: str = "claude-sonnet-4-6"
+    llm_api_url: str = ""  # For Ollama custom endpoint
 
 
 class CredentialsUpdate(BaseModel):
@@ -1229,7 +1238,7 @@ async def bot_start(request: BotStartRequest):
     # Fall back to env var if no API key provided in request
     if not request.llm_api_key and _cfg.LLM_API_KEY:
         request.llm_api_key = _cfg.LLM_API_KEY
-    if not request.llm_api_key:
+    if not request.llm_api_key and request.llm_model_type != "ollama":
         raise HTTPException(status_code=400, detail="LLM API key is required. Set LLM_API_KEY env var or provide it in the request.")
 
     credentials = _load_credentials()
@@ -1253,6 +1262,7 @@ async def bot_start(request: BotStartRequest):
         llm_api_key=request.llm_api_key,
         llm_model_type=request.llm_model_type,
         llm_model=request.llm_model,
+        llm_api_url=request.llm_api_url,
         min_score=request.min_score,
         max_applications=request.max_applications,
         headless=request.headless,
