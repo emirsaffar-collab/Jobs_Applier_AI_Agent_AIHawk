@@ -131,7 +131,8 @@ class RecruiterOutreach:
                 return True
             return False
 
-        except (PWTimeout, Exception):
+        except Exception as exc:
+            logger.debug("Direct message failed: {}", type(exc).__name__)
             return False
 
     async def _try_connect_with_note(self, page: Page, message: str) -> bool:
@@ -163,7 +164,8 @@ class RecruiterOutreach:
                 return True
             return False
 
-        except (PWTimeout, Exception):
+        except Exception as exc:
+            logger.debug("Direct message failed: {}", type(exc).__name__)
             return False
 
     # ------------------------------------------------------------------

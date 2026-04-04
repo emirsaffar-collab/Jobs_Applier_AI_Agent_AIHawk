@@ -134,8 +134,10 @@ class CaptchaSolver:
         self, client: httpx.AsyncClient, task_id: str, timeout: int = 120
     ) -> str | None:
         start = time.monotonic()
+        poll_delay = 2.0  # Start at 2s, increase with exponential backoff
         while time.monotonic() - start < timeout:
-            await asyncio.sleep(3)
+            await asyncio.sleep(poll_delay)
+            poll_delay = min(poll_delay * 1.5, 8.0)  # 2 → 3 → 4.5 → 6.75 → 8
             try:
                 resp = await client.post(
                     f"{CAPSOLVER_BASE}/getTaskResult",

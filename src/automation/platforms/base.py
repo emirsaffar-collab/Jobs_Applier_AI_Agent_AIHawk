@@ -76,27 +76,27 @@ class BasePlatform(ABC):
         """Wait a random amount to appear more human."""
         await asyncio.sleep(random.uniform(lo, hi))
 
-    async def _safe_click(self, page: Page, selector: str, *, timeout: int = 5000, retries: int = 2) -> bool:
-        """Click an element with retry on transient failures. Returns True on success."""
+    async def _safe_click(self, page: Page, selector: str, *, timeout: int = 5000, retries: int = 3) -> bool:
+        """Click an element with exponential-backoff retry. Returns True on success."""
         for attempt in range(retries + 1):
             try:
                 await page.click(selector, timeout=timeout)
                 return True
             except Exception:
                 if attempt < retries:
-                    await asyncio.sleep(0.5 * (attempt + 1))
+                    await asyncio.sleep(min(0.5 * (2 ** attempt), 5.0))
                     continue
                 return False
 
-    async def _safe_fill(self, page: Page, selector: str, value: str, *, timeout: int = 5000, retries: int = 2) -> bool:
-        """Fill a form field with retry. Returns True on success."""
+    async def _safe_fill(self, page: Page, selector: str, value: str, *, timeout: int = 5000, retries: int = 3) -> bool:
+        """Fill a form field with exponential-backoff retry. Returns True on success."""
         for attempt in range(retries + 1):
             try:
                 await page.fill(selector, value, timeout=timeout)
                 return True
             except Exception:
                 if attempt < retries:
-                    await asyncio.sleep(0.5 * (attempt + 1))
+                    await asyncio.sleep(min(0.5 * (2 ** attempt), 5.0))
                     continue
                 return False
 
@@ -127,19 +127,35 @@ class BasePlatform(ABC):
             await page.fill(selector, "Yes")
 
     async def _answer_with_llm(self, question: str, options: list[str] | None = None) -> str:
-        """Ask the LLM for the best answer given question + optional options."""
+        """Ask the LLM for the best answer given question + optional options.
+
+        Uses a circuit breaker so that repeated LLM failures fast-fail
+        instead of blocking application flow.
+        """
         if self._llm is None:
             return options[0] if options else "Yes"
+
+        from src.automation.resilience.circuit_breaker import CircuitBreaker
+        from src.automation.resilience.errors import CircuitOpenError
+
+        # Module-level singleton would cause import loop, so lazy-init here
+        if not hasattr(BasePlatform, "_llm_breaker"):
+            BasePlatform._llm_breaker = CircuitBreaker("llm_application", failure_threshold=5, recovery_timeout=90)
+
         prompt = f"Job application question: {question}"
         if options:
             prompt += f"\nOptions: {', '.join(options)}"
             prompt += "\nRespond with ONLY the best option text, nothing else."
         else:
             prompt += "\nAnswer concisely (1-2 sentences)."
+
         try:
-            result = self._llm.invoke(prompt)
-            if hasattr(result, "content"):
-                result = result.content
-            return str(result).strip()
+            async with BasePlatform._llm_breaker.call():
+                result = self._llm.invoke(prompt)
+                if hasattr(result, "content"):
+                    result = result.content
+                return str(result).strip()
+        except CircuitOpenError:
+            return options[0] if options else "Yes"
         except Exception:
             return options[0] if options else "Yes"

@@ -2,12 +2,17 @@
 
 Rates how well a candidate's resume matches a job description on a 1-10
 scale. Reuses the existing AIModel abstraction from llm_manager.py.
+
+Resilience: retries transient LLM failures and uses a circuit breaker
+so the bot can continue (with a default score) when the LLM is down.
 """
 from __future__ import annotations
 
 import json
 import re
 
+from src.automation.resilience.circuit_breaker import CircuitBreaker
+from src.automation.resilience.errors import CircuitOpenError, LLMServiceError
 from src.logging import logger
 
 SCORE_PROMPT = """You are a job fit evaluator. Given a candidate resume and a job description, score the fit.
@@ -28,6 +33,9 @@ IMPORTANT FACTORS:
 Respond ONLY with valid JSON (no markdown, no extra text):
 {"score": <1-10 int>, "keywords": "<comma-separated ATS keywords>", "reason": "<2-3 sentences>"}"""
 
+_DEFAULT_SCORE = 5
+_llm_breaker = CircuitBreaker("llm_scoring", failure_threshold=5, recovery_timeout=120)
+
 
 class JobRanker:
     """Score job listings against the candidate's resume using an LLM."""
@@ -42,7 +50,11 @@ class JobRanker:
         self._resume = resume_text[:8000]  # cap to avoid token overflow
 
     def score(self, title: str, company: str, description: str) -> dict:
-        """Score a job. Returns {"score": int, "keywords": str, "reason": str}."""
+        """Score a job. Returns {"score": int, "keywords": str, "reason": str}.
+
+        Retries once on transient failures. Falls back to a default score
+        when the LLM circuit breaker is open.
+        """
         job_text = (
             f"TITLE: {title}\n"
             f"COMPANY: {company}\n\n"
@@ -53,15 +65,57 @@ class JobRanker:
             f"RESUME:\n{self._resume}\n\n"
             f"---\n\nJOB POSTING:\n{job_text}"
         )
+
+        for attempt in range(2):
+            try:
+                return self._invoke_llm(prompt, title)
+            except CircuitOpenError:
+                logger.info("LLM circuit open — using default score for '{}'", title)
+                return {
+                    "score": _DEFAULT_SCORE,
+                    "keywords": "",
+                    "reason": "LLM unavailable, using default score",
+                }
+            except LLMServiceError as exc:
+                if attempt == 0:
+                    logger.warning("LLM scoring retry for '{}': {}", title, exc)
+                    continue
+                logger.warning("LLM scoring failed after retry for '{}': {}", title, exc)
+                return {"score": 0, "keywords": "", "reason": f"Error: {exc}"}
+            except Exception as exc:
+                logger.warning("LLM scoring failed for '{}': {}", title, exc)
+                return {"score": 0, "keywords": "", "reason": f"Error: {exc}"}
+
+        return {"score": 0, "keywords": "", "reason": "Scoring exhausted retries"}
+
+    def _invoke_llm(self, prompt: str, title: str) -> dict:
+        """Call the LLM within the circuit breaker (sync wrapper)."""
+        import asyncio
+
+        async def _guarded():
+            async with _llm_breaker.call():
+                response = self._llm.invoke(prompt)
+                if hasattr(response, "content"):
+                    response = response.content
+                return self._parse(response)
+
         try:
-            response = self._llm.invoke(prompt)
-            # Extract text content from LangChain BaseMessage if needed
-            if hasattr(response, "content"):
-                response = response.content
-            return self._parse(response)
-        except Exception as exc:
-            logger.warning("LLM scoring failed for '{}': {}", title, exc)
-            return {"score": 0, "keywords": "", "reason": f"Error: {exc}"}
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            loop = None
+
+        if loop and loop.is_running():
+            # We're inside an async context — run synchronously since
+            # llm.invoke() is itself synchronous (LangChain blocking call)
+            try:
+                response = self._llm.invoke(prompt)
+                if hasattr(response, "content"):
+                    response = response.content
+                return self._parse(response)
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                raise LLMServiceError(str(exc)) from exc
+        else:
+            return asyncio.run(_guarded())
 
     @staticmethod
     def _parse(response: str) -> dict:

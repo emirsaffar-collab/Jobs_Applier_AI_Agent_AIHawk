@@ -148,6 +148,17 @@ class BrowserManager:
         )
         return self._context
 
+    def is_healthy(self) -> bool:
+        """Return True if the browser and context are alive."""
+        try:
+            if self._context is None or self._browser is None:
+                return False
+            if not self._browser.is_connected():
+                return False
+            return True
+        except Exception:
+            return False
+
     async def rotate_proxy(self) -> None:
         """Close current browser and relaunch with the next proxy in the pool.
 

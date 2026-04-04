@@ -107,3 +107,51 @@ class RateLimiter:
                 "remaining": max(0, limit - count),
             }
         return result
+
+    # ------------------------------------------------------------------
+    # State serialisation for crash recovery
+    # ------------------------------------------------------------------
+
+    def export_state(self) -> dict:
+        """Serialize rate-limiter state using wall-clock timestamps.
+
+        Monotonic timestamps are converted to wall-clock equivalents so
+        the exported state is meaningful across process restarts.
+        """
+        mono_now = time.monotonic()
+        wall_now = time.time()
+        offset = wall_now - mono_now  # wall = mono + offset
+
+        windows: dict[str, list[float]] = {}
+        for platform, pw in self._windows.items():
+            # Prune before exporting
+            pw.count_in_window()
+            windows[platform] = [t + offset for t in pw.timestamps]
+
+        last_apply: dict[str, float] = {
+            p: t + offset for p, t in self._last_apply.items()
+        }
+        return {"windows": windows, "last_apply": last_apply}
+
+    def import_state(self, data: dict) -> None:
+        """Restore state exported by ``export_state()``.
+
+        Wall-clock timestamps are converted back to monotonic equivalents.
+        Timestamps outside the 24-hour window are automatically pruned.
+        """
+        if not data:
+            return
+        mono_now = time.monotonic()
+        wall_now = time.time()
+        offset = wall_now - mono_now  # mono = wall - offset
+
+        for platform, wall_ts in data.get("windows", {}).items():
+            mono_ts = [t - offset for t in wall_ts]
+            self._windows[platform] = PlatformWindow(timestamps=mono_ts)
+            # Prune expired entries
+            self._windows[platform].count_in_window()
+
+        for platform, wall_t in data.get("last_apply", {}).items():
+            self._last_apply[platform] = wall_t - offset
+
+        logger.info("Rate limiter state restored for {} platform(s)", len(data.get("windows", {})))
