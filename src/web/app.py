@@ -32,7 +32,7 @@ class _OptionalAuthMiddleware(BaseHTTPMiddleware):
     separately since middleware cannot intercept WS upgrades reliably.
     """
 
-    EXEMPT_PATHS = {"/", "/api/health", "/docs", "/openapi.json"}
+    EXEMPT_PATHS = {"/", "/api/health", "/docs", "/openapi.json", "/robots.txt", "/og-image", "/favicon.ico"}
 
     async def dispatch(self, request: Request, call_next):
         if not _WEB_API_KEY:
@@ -666,6 +666,31 @@ async def health():
         "data_folder_ready": len(missing) == 0,
         "missing_files": missing,
     }
+
+
+@app.get("/robots.txt", response_class=Response)
+async def robots_txt():
+    """Serve robots.txt for search engine crawlers."""
+    content = "User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /ws/\n"
+    return Response(content=content, media_type="text/plain")
+
+
+@app.get("/og-image", response_class=Response)
+async def og_image():
+    """Serve the AIHawk logo as the Open Graph image for social media previews."""
+    logo_path = Path("assets/AIHawk.png")
+    if not logo_path.exists():
+        raise HTTPException(status_code=404, detail="Logo not found")
+    return Response(content=logo_path.read_bytes(), media_type="image/png")
+
+
+@app.get("/favicon.ico")
+async def favicon_ico():
+    """Return 204 to suppress favicon.ico 404 noise in logs.
+
+    Modern browsers use the SVG favicon from the <link> tag in the HTML head.
+    """
+    return Response(status_code=204)
 
 
 @app.get("/api/config")
