@@ -23,17 +23,32 @@ _CONFIRM_RE = re.compile(
 
 
 def _detect_ats(url: str) -> str:
-    """Inspect a job URL and return a short ATS identifier string."""
-    url_lower = url.lower()
-    if "greenhouse.io" in url_lower or "boards.greenhouse.io" in url_lower:
+    """Inspect a job URL and return a short ATS identifier string.
+
+    Uses proper URL parsing so domain checks are not fooled by substrings
+    appearing in query strings or path segments.
+    """
+    from urllib.parse import urlparse
+    try:
+        hostname = urlparse(url).hostname or ""
+    except Exception:
+        hostname = ""
+    hostname = hostname.lower()
+
+    # Greenhouse
+    if hostname == "boards.greenhouse.io" or hostname.endswith(".greenhouse.io"):
         return "greenhouse"
-    if "jobs.lever.co" in url_lower or "lever.co" in url_lower:
+    # Lever
+    if hostname == "jobs.lever.co" or hostname == "lever.co" or hostname.endswith(".lever.co"):
         return "lever"
-    if "myworkdayjobs.com" in url_lower or "workday.com" in url_lower:
+    # Workday
+    if hostname.endswith(".myworkdayjobs.com") or hostname.endswith(".workday.com"):
         return "workday"
-    if "smartrecruiters.com" in url_lower:
+    # SmartRecruiters
+    if hostname == "smartrecruiters.com" or hostname.endswith(".smartrecruiters.com"):
         return "smartrecruiters"
-    if "icims.com" in url_lower:
+    # iCIMS
+    if hostname == "icims.com" or hostname.endswith(".icims.com"):
         return "icims"
     return "generic"
 
@@ -266,7 +281,7 @@ class UniversalPlatform(BasePlatform):
             await apply_btn.click()
             await self._human_delay(2, 3)
 
-        for _step in range(10):
+        for _ in range(10):
             await self._human_delay(1, 2)
             filled = await self._fill_all_inputs(page, resume_path, cover_letter_path)
 

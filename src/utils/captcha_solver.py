@@ -254,7 +254,7 @@ class TwoCaptchaProvider(CaptchaProvider):
                 continue
             if data.get("status") == 1:
                 return str(data.get("request", ""))
-            if data.get("request") not in ("CAPCHA_NOT_READY", "CAPTCHA_NOT_READY"):
+            if data.get("request") not in ("CAPTCHA_NOT_READY",):
                 logger.warning("2Captcha error during poll: {}", data.get("request"))
                 return None
         logger.warning("2Captcha timed out")
