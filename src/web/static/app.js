@@ -10,6 +10,7 @@ let currentJobId  = null;
 let genWs         = null;
 let botWs         = null;
 let activePlatform = 'linkedin';
+let envApiKeyConfigured = false;  // true when LLM_API_KEY env var is set on the server
 
 const tags = { positions: [], locations: [], blCompanies: [], blTitles: [], blLocations: [] };
 let genHistory = LS.get('gen_history', []);
@@ -55,6 +56,7 @@ async function checkEnvConfig() {
     const r = await fetch('/api/config');
     if (!r.ok) return;
     const d = await r.json();
+    envApiKeyConfigured = !!d.llm_api_key_configured;
     if (d.llm_api_key_configured) {
       // API key is set via env var — make fields optional and show badge
       ['llmApiKey', 'botApiKey', 'oApiKey'].forEach(id => {
@@ -263,7 +265,7 @@ function selectAction(action) {
 }
 async function startGeneration() {
   const apiKey = document.getElementById('llmApiKey').value.trim();
-  if (!apiKey) { showStatus('genStatus', 'API key is required.', 'error'); return; }
+  if (!apiKey && !envApiKeyConfigured) { showStatus('genStatus', 'API key is required.', 'error'); return; }
   const yaml = document.getElementById('genResumeYaml').value.trim();
   if (!yaml)   { showStatus('genStatus', 'Resume YAML is required.', 'error'); return; }
   const btn = document.getElementById('generateBtn');
@@ -366,7 +368,7 @@ async function saveCredentials() {
 }
 async function botStart() {
   const apiKey = document.getElementById('botApiKey').value.trim();
-  if (!apiKey) { showAlert('botAlert', 'API key is required.', 'danger'); return; }
+  if (!apiKey && !envApiKeyConfigured) { showAlert('botAlert', 'API key is required.', 'danger'); return; }
   try {
     const r = await fetch('/api/bot/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
       platforms: [activePlatform], llm_model_type: document.getElementById('botProvider').value,
