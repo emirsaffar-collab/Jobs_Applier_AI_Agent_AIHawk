@@ -293,7 +293,7 @@ async function loadStyles() {
   try {
     const r = await fetch('/api/styles'); if (!r.ok) return;
     const d = await r.json(); const sel = document.getElementById('resumeStyle'); sel.innerHTML = '';
-    (d.styles || ['classic']).forEach((s, i) => { const o = document.createElement('option'); o.value = s; o.textContent = s; if (i === 0) o.selected = true; sel.appendChild(o); });
+    (d.styles || [{name:'classic'}]).forEach((s, i) => { const name = typeof s === 'string' ? s : s.name; const o = document.createElement('option'); o.value = name; o.textContent = name; if (i === 0) o.selected = true; sel.appendChild(o); });
   } catch {}
 }
 const MODEL_LISTS = {
