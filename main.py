@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import sys
 
@@ -16,13 +18,8 @@ from pathlib import Path
 import traceback
 from typing import List, Optional, Tuple, Dict
 
-import click
-import inquirer
 import yaml
 import re
-from src.libs.resume_and_cover_builder import ResumeFacade, ResumeGenerator, StyleManager
-from src.resume_schemas.job_application_profile import JobApplicationProfile
-from src.resume_schemas.resume import Resume
 from src.logging import logger
 from src.utils.constants import (
     PLAIN_TEXT_RESUME_YAML,
@@ -310,6 +307,10 @@ class FileManager:
 
 def _setup_facade(parameters: dict, llm_api_key: str, job_url: Optional[str] = None) -> Tuple[ResumeFacade, StyleManager]:
     """Shared setup for all document generation functions."""
+    import inquirer
+    from src.libs.resume_and_cover_builder import ResumeFacade, ResumeGenerator, StyleManager
+    from src.resume_schemas.resume import Resume
+
     with open(parameters["uploads"]["plainTextResume"], "r", encoding="utf-8") as file:
         plain_text_resume = file.read()
 
@@ -372,6 +373,7 @@ def _save_pdf(result_base64: str, output_dir: Path, filename: str) -> None:
 
 def _prompt_job_url() -> str:
     """Ask the user for a job description URL."""
+    import inquirer
     questions = [inquirer.Text('job_url', message="Please enter the URL of the job description:")]
     answers = inquirer.prompt(questions)
     if answers is None:
@@ -399,7 +401,7 @@ def create_cover_letter(parameters: dict, llm_api_key: str):
         if driver:
             try:
                 driver.quit()
-            except (OSError, WebDriverException):
+            except OSError:
                 pass
         raise
 
@@ -424,7 +426,7 @@ def create_resume_pdf_job_tailored(parameters: dict, llm_api_key: str):
         if driver:
             try:
                 driver.quit()
-            except (OSError, WebDriverException):
+            except OSError:
                 pass
         raise
 
@@ -445,7 +447,7 @@ def create_resume_pdf(parameters: dict, llm_api_key: str):
         if driver:
             try:
                 driver.quit()
-            except (OSError, WebDriverException):
+            except OSError:
                 pass
         raise
 
@@ -484,6 +486,7 @@ def prompt_user_action() -> str:
 
     :return: Selected action.
     """
+    import inquirer
     try:
         questions = [
             inquirer.List(
