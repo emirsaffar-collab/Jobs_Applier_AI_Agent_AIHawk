@@ -27,10 +27,15 @@ def create_chat_model(api_key: str):
         if cfg.LLM_API_URL:
             return ChatOllama(model=model_name, base_url=cfg.LLM_API_URL)
         return ChatOllama(model=model_name)
+    elif model_type == "huggingface":
+        from langchain_huggingface import ChatHuggingFace, HuggingFaceEndpoint
+        llm = HuggingFaceEndpoint(repo_id=model_name, huggingfacehub_api_token=api_key, temperature=0.4)
+        return ChatHuggingFace(llm=llm)
+    elif model_type == "perplexity":
+        from langchain_community.chat_models import ChatPerplexity
+        return ChatPerplexity(model=model_name, api_key=api_key, temperature=0.4)
     else:
-        # Fallback to OpenAI-compatible
-        from langchain_openai import ChatOpenAI
-        return ChatOpenAI(model_name=model_name, openai_api_key=api_key, temperature=0.4)
+        raise ValueError(f"Unsupported model type: {model_type}")
 
 
 def create_embeddings(api_key: str):
