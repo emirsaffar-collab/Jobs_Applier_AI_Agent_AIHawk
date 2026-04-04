@@ -43,12 +43,18 @@
       <div class="onboarding-desc">AIHawk uses large language models to tailor your resume and generate cover letters. Your API key is stored only in your browser.</div>
       <div class="form-group">
         <label class="form-label">LLM Provider</label>
-        <select class="form-select" id="oProvider">
+        <select class="form-select" id="oProvider" onchange="updateModelList('oProvider','oModel')">
           <option value="claude">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT)</option>
           <option value="gemini">Google (Gemini)</option>
           <option value="ollama">Ollama (Local)</option>
+          <option value="huggingface">HuggingFace</option>
+          <option value="perplexity">Perplexity</option>
         </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Model</label>
+        <select class="form-select" id="oModel"></select>
       </div>
       <div class="form-group">
         <label class="form-label">API Key</label>
@@ -425,20 +431,18 @@
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">LLM Provider</label>
-                  <select class="form-select" id="llmProvider" onchange="updateModelList()">
+                  <select class="form-select" id="llmProvider" onchange="updateModelList('llmProvider','llmModel')">
                     <option value="claude">Claude (Anthropic)</option>
                     <option value="openai">OpenAI (GPT)</option>
                     <option value="gemini">Google Gemini</option>
                     <option value="ollama">Ollama (Local)</option>
+                    <option value="huggingface">HuggingFace</option>
+                    <option value="perplexity">Perplexity</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Model</label>
-                  <select class="form-select" id="llmModel">
-                    <option value="claude-opus-4-6">claude-opus-4-6</option>
-                    <option value="claude-sonnet-4-6" selected>claude-sonnet-4-6</option>
-                    <option value="claude-haiku-4-5">claude-haiku-4-5</option>
-                  </select>
+                  <select class="form-select" id="llmModel"></select>
                 </div>
               </div>
               <div class="form-group">
@@ -596,16 +600,18 @@
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">LLM Provider</label>
-                  <select class="form-select" id="botProvider">
+                  <select class="form-select" id="botProvider" onchange="updateModelList('botProvider','botModel')">
                     <option value="claude">Claude</option>
                     <option value="openai">OpenAI</option>
                     <option value="gemini">Gemini</option>
                     <option value="ollama">Ollama</option>
+                    <option value="huggingface">HuggingFace</option>
+                    <option value="perplexity">Perplexity</option>
                   </select>
                 </div>
                 <div class="form-group">
                   <label class="form-label">Model</label>
-                  <input class="form-input" id="botModel" value="claude-sonnet-4-6" />
+                  <select class="form-select" id="botModel"></select>
                 </div>
               </div>
               <div class="form-group">

@@ -44,10 +44,11 @@ function saveApiKey() {
   if (k) LS.set('api_key', k);
 }
 function loadSavedApiKey() {
-  const k = LS.get('api_key', ''); const p = LS.get('api_provider', 'claude');
+  const k = LS.get('api_key', ''); const p = LS.get('api_provider', 'claude'); const m = LS.get('api_model', '');
   if (k) { setVal('llmApiKey', k); setVal('botApiKey', k); setVal('oApiKey', k); }
   setVal('llmProvider', p); setVal('botProvider', p); setVal('oProvider', p);
-  updateModelList();
+  updateAllModelLists();
+  if (m) { setVal('llmModel', m); setVal('botModel', m); setVal('oModel', m); }
 }
 
 async function checkEnvConfig() {
@@ -148,7 +149,7 @@ async function uploadPdfResume(source) {
   fd.append('file', file);
   fd.append('llm_api_key', apiKey);
   fd.append('llm_model_type', provider);
-  fd.append('llm_model', provider === 'claude' ? 'claude-sonnet-4-6' : provider === 'openai' ? 'gpt-4o' : provider === 'gemini' ? 'gemini-2.0-flash' : 'llama3');
+  fd.append('llm_model', LS.get('api_model', '') || DEFAULT_MODELS[provider] || 'claude-sonnet-4-6');
   showStatus(statusId, 'Uploading and parsing your CV... This may take a moment.', 'info');
   if (btn) btn.disabled = true;
   try {
@@ -236,16 +237,39 @@ async function loadStyles() {
   } catch {}
 }
 const MODEL_LISTS = {
-  claude:  ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
-  openai:  ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo'],
-  gemini:  ['gemini-1.5-pro', 'gemini-1.5-flash', 'gemini-1.0-pro'],
-  ollama:  ['llama3', 'mistral', 'codellama'],
+  claude:      ['claude-opus-4-6', 'claude-sonnet-4-6', 'claude-haiku-4-5'],
+  openai:      ['gpt-4.1', 'gpt-4.1-mini', 'gpt-4.1-nano', 'gpt-4o', 'gpt-4o-mini', 'o3', 'o4-mini'],
+  gemini:      ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
+  ollama:      ['llama3', 'mistral', 'codellama', 'gemma', 'phi3'],
+  huggingface: ['meta-llama/Llama-3-70b-chat-hf', 'mistralai/Mistral-7B-Instruct-v0.3'],
+  perplexity:  ['sonar-pro', 'sonar', 'sonar-deep-research'],
 };
-function updateModelList() {
-  const p = document.getElementById('llmProvider').value;
-  const sel = document.getElementById('llmModel'); sel.innerHTML = '';
+const DEFAULT_MODELS = {
+  claude: 'claude-sonnet-4-6', openai: 'gpt-4.1', gemini: 'gemini-2.5-flash',
+  ollama: 'llama3', huggingface: 'meta-llama/Llama-3-70b-chat-hf', perplexity: 'sonar-pro',
+};
+function updateModelList(providerSelectId, modelSelectId) {
+  providerSelectId = providerSelectId || 'llmProvider';
+  modelSelectId = modelSelectId || 'llmModel';
+  const providerEl = document.getElementById(providerSelectId);
+  const sel = document.getElementById(modelSelectId);
+  if (!providerEl || !sel) return;
+  const p = providerEl.value;
+  const savedModel = LS.get('api_model', '');
+  sel.innerHTML = '';
   (MODEL_LISTS[p] || []).forEach(m => { const o = document.createElement('option'); o.value = m; o.textContent = m; sel.appendChild(o); });
+  if (savedModel && [...sel.options].some(o => o.value === savedModel)) {
+    sel.value = savedModel;
+  }
+  sel.onchange = function() { LS.set('api_model', sel.value); };
   LS.set('api_provider', p);
+}
+function updateAllModelLists() {
+  const p = (document.getElementById('llmProvider') || document.getElementById('oProvider') || {}).value || 'claude';
+  ['oProvider','llmProvider','botProvider'].forEach(pid => { const el = document.getElementById(pid); if (el) el.value = p; });
+  updateModelList('oProvider', 'oModel');
+  updateModelList('llmProvider', 'llmModel');
+  updateModelList('botProvider', 'botModel');
 }
 function selectAction(action) {
   currentAction = action;
@@ -520,8 +544,14 @@ function renderOStep() {
 }
 function oNext(step) {
   if (step === 1) {
-    const k = document.getElementById('oApiKey').value.trim(); const p = document.getElementById('oProvider').value;
-    if (k) { LS.set('api_key', k); LS.set('api_provider', p); setVal('llmApiKey', k); setVal('botApiKey', k); setVal('llmProvider', p); setVal('botProvider', p); updateModelList(); }
+    const k = document.getElementById('oApiKey').value.trim(); const p = document.getElementById('oProvider').value; const m = document.getElementById('oModel').value;
+    if (k) {
+      LS.set('api_key', k); LS.set('api_provider', p); LS.set('api_model', m);
+      setVal('llmApiKey', k); setVal('botApiKey', k);
+      setVal('llmProvider', p); setVal('botProvider', p);
+      updateModelList('llmProvider', 'llmModel'); updateModelList('botProvider', 'botModel');
+      setVal('llmModel', m); setVal('botModel', m);
+    }
   }
   oStep = Math.min(oStep + 1, 3); renderOStep();
 }
