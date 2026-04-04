@@ -365,5 +365,10 @@
       #sidebar.open { left: 0; }
       #menuToggle { display: flex !important; }
     }
+    .sidebar-backdrop {
+      position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 99; display: none;
+    }
+    .sidebar-backdrop.show { display: block; }
+    .sidebar-backdrop.hidden { display: none; }
     #menuToggle { display: none; }
   

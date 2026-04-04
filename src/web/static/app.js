@@ -11,6 +11,7 @@ let genWs         = null;
 let botWs         = null;
 let activePlatform = 'linkedin';
 let envApiKeyConfigured = false;  // true when LLM_API_KEY env var is set on the server
+let genPollInterval = null;
 
 const tags = { positions: [], locations: [], blCompanies: [], blTitles: [], blLocations: [] };
 let genHistory = LS.get('gen_history', []);
@@ -22,6 +23,7 @@ document.addEventListener('DOMContentLoaded', function() {
   checkEnvConfig();
   loadStyles();
   loadPreferencesFromServer();
+  loadCredentials();
   loadApplications();
   refreshBotStatus();
   renderGenHistory();
@@ -40,9 +42,12 @@ function toggleTheme() {
   LS.set('theme', t); applyTheme(t);
 }
 
-function saveApiKey() {
-  const k = document.getElementById('llmApiKey').value || document.getElementById('botApiKey').value;
-  if (k) LS.set('api_key', k);
+function saveApiKey(val) {
+  const k = val || document.getElementById('llmApiKey').value || document.getElementById('botApiKey').value;
+  if (k) {
+    LS.set('api_key', k);
+    ['llmApiKey', 'botApiKey'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = k; });
+  }
 }
 function loadSavedApiKey() {
   const k = LS.get('api_key', ''); const p = LS.get('api_provider', 'claude'); const m = LS.get('api_model', '');
@@ -99,8 +104,15 @@ function showPage(page) {
   if (page === 'applications') loadApplications();
   if (page === 'dashboard')    loadDashboardStats();
   document.getElementById('sidebar').classList.remove('open');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (backdrop) { backdrop.classList.add('hidden'); backdrop.classList.remove('show'); }
 }
-function toggleSidebar() { document.getElementById('sidebar').classList.toggle('open'); }
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  sidebar.classList.toggle('open');
+  if (backdrop) { backdrop.classList.toggle('show'); backdrop.classList.toggle('hidden'); }
+}
 
 async function checkHealth() {
   try {
@@ -121,12 +133,15 @@ async function loadResumeFromServer() {
   } catch(e) { showStatus('resumeStatus', 'Load failed: ' + e.message, 'error'); }
 }
 async function saveResumeToServer() {
+  const btn = document.querySelector('[onclick="saveResumeToServer()"]');
+  if (btn) btn.disabled = true;
   showStatus('resumeStatus', 'Saving\u2026', 'info');
   try {
     const r = await fetchRetry('/api/resume', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({resume_yaml: document.getElementById('resumeYaml').value}) });
     if (!r.ok) throw new Error(await r.text());
     showStatus('resumeStatus', 'Saved successfully.', 'success');
   } catch(e) { showStatus('resumeStatus', 'Save failed: ' + e.message, 'error'); }
+  finally { if (btn) btn.disabled = false; }
 }
 function copyResumeYaml() {
   navigator.clipboard.writeText(document.getElementById('resumeYaml').value).then(() => showStatus('resumeStatus', 'Copied to clipboard.', 'success'));
@@ -135,8 +150,14 @@ function loadResumeExample() {
   setVal('resumeYaml', getExampleResume());
   showStatus('resumeStatus', 'Example loaded. Save to persist.', 'info');
 }
-function loadResumeIntoGenerate() {
-  setVal('genResumeYaml', document.getElementById('resumeYaml').value);
+async function loadResumeIntoGenerate() {
+  let yaml = document.getElementById('resumeYaml').value;
+  if (!yaml.trim()) {
+    try {
+      const r = await fetch('/api/resume'); if (r.ok) { const d = await r.json(); yaml = d.resume_yaml || ''; setVal('resumeYaml', yaml); }
+    } catch {}
+  }
+  setVal('genResumeYaml', yaml);
   showPage('generate');
 }
 
@@ -201,7 +222,7 @@ async function loadPreferencesFromServer() {
     const jt = d.job_types || {};
     setChk('jtFullTime', jt.full_time ?? true); setChk('jtContract', jt.contract ?? false);
     setChk('jtPartTime', jt.part_time ?? false); setChk('jtTemporary', jt.temporary ?? true);
-    setChk('jtInternship', jt.internship ?? false); setChk('jtOther', jt.other ?? false); setChk('jtVolunteer', jt.volunteer ?? true);
+    setChk('jtInternship', jt.internship ?? false); setChk('jtOther', jt.other ?? false); setChk('jtVolunteer', jt.volunteer ?? false);
     const df = d.date_filters || {};
     if (df.all_time) setRadio('dfAllTime'); else if (df.month) setRadio('dfMonth'); else if (df.week) setRadio('dfWeek'); else setRadio('df24h');
     tags.positions = d.positions || []; tags.locations = d.locations || [];
@@ -223,6 +244,8 @@ async function loadPreferencesFromServer() {
   } catch(e) { showToast('Failed to load preferences: ' + e.message, 'warn'); }
 }
 async function savePreferencesToServer() {
+  const btn = document.querySelector('[onclick="savePreferencesToServer()"]');
+  if (btn) btn.disabled = true;
   showStatus('prefStatus', 'Saving\u2026', 'info');
   try {
     const df = document.querySelector('input[name="dateFilter"]:checked')?.value || 'twenty_four_hours';
@@ -240,6 +263,7 @@ async function savePreferencesToServer() {
     if (!r.ok) throw new Error(await r.text());
     showStatus('prefStatus', 'Preferences saved.', 'success');
   } catch(e) { showStatus('prefStatus', 'Save failed: ' + e.message, 'error'); showToast('Preferences save failed', 'error'); }
+  finally { if (btn) btn.disabled = false; }
 }
 
 async function loadStyles() {
@@ -296,6 +320,7 @@ function selectAction(action) {
   document.getElementById('jobUrlGroup').style.display = (action !== 'resume') ? 'block' : 'none';
 }
 async function startGeneration() {
+  if (genPollInterval) { clearInterval(genPollInterval); genPollInterval = null; }
   const apiKey = document.getElementById('llmApiKey').value.trim();
   const provider = document.getElementById('llmProvider').value;
   if (!apiKey && !envApiKeyConfigured && provider !== 'ollama') { showStatus('genStatus', 'API key is required.', 'error'); return; }
@@ -304,6 +329,7 @@ async function startGeneration() {
   const btn = document.getElementById('generateBtn');
   btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> Generating\u2026';
   setGenProgress(0, 'Starting\u2026');
+  document.getElementById('genProgressBar').className = 'progress-bar';
   show('genProgressWrap'); hide('genDownloadWrap'); showStatus('genStatus', '', '');
   try {
     const r = await fetch('/api/generate', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
@@ -335,12 +361,13 @@ function connectGenWebSocket(jobId) {
   genWs.onerror = () => pollGenStatus(jobId);
 }
 function pollGenStatus(jobId) {
-  const iv = setInterval(async () => {
+  if (genPollInterval) clearInterval(genPollInterval);
+  genPollInterval = setInterval(async () => {
     try {
       const r = await fetch(`/api/status/${jobId}`); if (!r.ok) return;
       const d = await r.json(); setGenProgress(d.progress || 0, d.message || '');
-      if (d.status === 'completed') { clearInterval(iv); onGenComplete(jobId); }
-      if (d.status === 'failed')    { clearInterval(iv); onGenFailed(d.error || 'Unknown'); }
+      if (d.status === 'completed') { clearInterval(genPollInterval); genPollInterval = null; onGenComplete(jobId); }
+      if (d.status === 'failed')    { clearInterval(genPollInterval); genPollInterval = null; onGenFailed(d.error || 'Unknown'); }
     } catch {}
   }, 2000);
 }
@@ -389,6 +416,8 @@ async function loadCredentials() {
   } catch(e) { appendLog('Failed to load credentials: ' + e.message, 'error'); }
 }
 async function saveCredentials() {
+  const btn = document.querySelector('[onclick="saveCredentials()"]');
+  if (btn) btn.disabled = true;
   try {
     const pl = { linkedin: 'li', indeed: 'ind', glassdoor: 'gd', ziprecruiter: 'zr', dice: 'di' };
     const payload = {};
@@ -399,6 +428,7 @@ async function saveCredentials() {
     if (!r.ok) throw new Error(await r.text());
     appendLog('Credentials saved.', 'success');
   } catch(e) { appendLog('Failed to save credentials: ' + e.message, 'error'); }
+  finally { if (btn) btn.disabled = false; }
 }
 async function botStart() {
   const apiKey = document.getElementById('botApiKey').value.trim();
@@ -622,7 +652,7 @@ function showToast(msg, type = 'info', durationMs = 4000) {
   const icons = { success: '\u2713', error: '\u2717', warn: '\u26A0', info: '\u2139' };
   const colors = { success: '#22c55e', error: '#ef4444', warn: '#f59e0b', info: '#3b82f6' };
   const toast = document.createElement('div');
-  toast.style.cssText = `display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:8px;background:var(--card-bg,#1e1e2e);border:1px solid ${colors[type] || colors.info};color:var(--text,#e0e0e0);font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;`;
+  toast.style.cssText = `display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:8px;background:var(--surface);border:1px solid ${colors[type] || colors.info};color:var(--text);font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;`;
   toast.innerHTML = `<span style="color:${colors[type] || colors.info};font-size:16px">${icons[type] || icons.info}</span><span>${esc(msg)}</span>`;
   container.appendChild(toast);
   requestAnimationFrame(() => { toast.style.opacity = '1'; });

@@ -93,9 +93,9 @@
     </div>
     <!-- Step 3 -->
     <div class="onboarding-panel" id="oPanel3">
-      <div class="onboarding-icon">&#9881;&#65039;</div>
-      <div class="onboarding-title">Set Job Preferences</div>
-      <div class="onboarding-desc">Configure work location, experience level, job types, and positions you are targeting. These guide the Auto Apply bot when searching for jobs.</div>
+      <div class="onboarding-icon">&#127881;</div>
+      <div class="onboarding-title">You're All Set!</div>
+      <div class="onboarding-desc">Your AI provider and resume are configured. You can fine-tune your <strong>job preferences</strong> (work location, experience level, target positions) anytime from the <strong>Preferences</strong> page in the sidebar.</div>
       <div class="onboarding-nav">
         <button class="btn btn-ghost" onclick="oBack(3)">&#8592; Back</button>
         <button class="btn btn-primary" onclick="oFinish()">Finish Setup &#10003;</button>
@@ -103,6 +103,9 @@
     </div>
   </div>
 </div>
+
+<!-- Sidebar Backdrop (mobile) -->
+<div id="sidebarBackdrop" class="sidebar-backdrop hidden" onclick="toggleSidebar()"></div>
 
 <!-- Sidebar -->
 <nav id="sidebar">
@@ -270,10 +273,11 @@
               <p>Structure your YAML with these sections:</p>
               <ul style="margin:10px 0 0 18px;display:flex;flex-direction:column;gap:5px">
                 <li><code style="color:var(--accent)">personal_information</code></li>
-                <li><code style="color:var(--accent)">work_experience</code></li>
-                <li><code style="color:var(--accent)">education</code></li>
-                <li><code style="color:var(--accent)">skills</code></li>
+                <li><code style="color:var(--accent)">education_details</code></li>
+                <li><code style="color:var(--accent)">experience_details</code></li>
                 <li><code style="color:var(--accent)">projects</code></li>
+                <li><code style="color:var(--accent)">certifications</code></li>
+                <li><code style="color:var(--accent)">languages</code></li>
               </ul>
             </div>
           </div>
@@ -329,7 +333,7 @@
                 <label class="check-item"><input type="checkbox" id="jtTemporary" checked /> Temporary</label>
                 <label class="check-item"><input type="checkbox" id="jtInternship" /> Internship</label>
                 <label class="check-item"><input type="checkbox" id="jtOther" /> Other</label>
-                <label class="check-item"><input type="checkbox" id="jtVolunteer" checked /> Volunteer</label>
+                <label class="check-item"><input type="checkbox" id="jtVolunteer" /> Volunteer</label>
               </div>
             </div>
             <div class="settings-section">
@@ -455,7 +459,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label">API Key</label>
-                <input class="form-input" id="llmApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey()" />
+                <input class="form-input" id="llmApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey(this.value)" />
                 <div class="credential-note">Stored locally in your browser.</div>
               </div>
             </div>
@@ -628,7 +632,7 @@
               </div>
               <div class="form-group">
                 <label class="form-label">API Key</label>
-                <input class="form-input" id="botApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey()" />
+                <input class="form-input" id="botApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey(this.value)" />
               </div>
               <div class="form-row">
                 <div class="form-group">
