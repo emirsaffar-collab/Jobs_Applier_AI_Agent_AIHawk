@@ -16,7 +16,8 @@ WORKDIR /app
 
 # Copy requirements first for caching
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir --no-deps git+https://github.com/feder-cr/lib_resume_builder_AIHawk.git
 
 # Copy application code
 COPY . .
