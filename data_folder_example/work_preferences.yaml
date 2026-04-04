@@ -46,6 +46,13 @@ title_blacklist:
 location_blacklist:
   - Brazil
 
+# --- Salary Filter ---
+# Set min/max annual salary to filter jobs. 0 = no filter.
+salary:
+  min: 0          # Minimum annual salary (0 = no filter)
+  max: 0          # Maximum annual salary (0 = no filter)
+  currency: "USD"
+
 # --- Optional Tuning Parameters ---
 # These can also be set via environment variables (env vars take precedence).
 # Minimum job fit score (1-10) to auto-apply. Lower = more applications, less targeted.

@@ -64,4 +64,19 @@ def validate_work_preferences(data: dict) -> list[str]:
         if not isinstance(val, list):
             errors.append(f"'{bl}' must be a list")
 
+    # Validate salary filter (optional section)
+    salary = data.get("salary")
+    if salary is not None:
+        if not isinstance(salary, dict):
+            errors.append("'salary' must be a mapping with min, max, and currency keys")
+        else:
+            sal_min = salary.get("min", 0)
+            sal_max = salary.get("max", 0)
+            if not isinstance(sal_min, int) or sal_min < 0:
+                errors.append("salary.min must be a non-negative integer")
+            if not isinstance(sal_max, int) or sal_max < 0:
+                errors.append("salary.max must be a non-negative integer")
+            if isinstance(sal_min, int) and isinstance(sal_max, int) and sal_max > 0 and sal_min > sal_max:
+                errors.append("salary.min must not be greater than salary.max")
+
     return errors

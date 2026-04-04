@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import sqlite3
 import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -71,6 +72,20 @@ class ApplicationTracker:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_applications_company_title ON applications (company, title)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications (status)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_applications_platform ON applications (platform)")
+        # Rate-limit event persistence table
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS rate_limit_events (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                platform   TEXT NOT NULL,
+                applied_at REAL NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_rle_platform ON rate_limit_events (platform)")
+        # Confirmed-application column (added in v2 — idempotent via ALTER)
+        try:
+            conn.execute("ALTER TABLE applications ADD COLUMN confirmed_at TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
         conn.commit()
         logger.debug("ApplicationTracker DB initialized at {}", self.db_path)
 
@@ -129,6 +144,17 @@ class ApplicationTracker:
         conn.execute(
             "UPDATE applications SET status='failed', notes=? WHERE url=?",
             (reason, url),
+        )
+        conn.commit()
+
+    def mark_confirmed(self, url: str, confirmed_at: str = "") -> None:
+        """Mark an application as confirmed (post-submit verification succeeded)."""
+        if not confirmed_at:
+            confirmed_at = datetime.now(timezone.utc).isoformat()
+        conn = _get_conn(self.db_path)
+        conn.execute(
+            "UPDATE applications SET confirmed_at=? WHERE url=?",
+            (confirmed_at, url),
         )
         conn.commit()
 
@@ -194,6 +220,9 @@ class ApplicationTracker:
         failed = conn.execute(
             "SELECT COUNT(*) FROM applications WHERE status='failed'"
         ).fetchone()[0]
+        confirmed = conn.execute(
+            "SELECT COUNT(*) FROM applications WHERE confirmed_at IS NOT NULL"
+        ).fetchone()[0]
         by_platform = conn.execute(
             "SELECT platform, COUNT(*) FROM applications GROUP BY platform"
         ).fetchall()
@@ -202,6 +231,7 @@ class ApplicationTracker:
             "applied": applied,
             "skipped": skipped,
             "failed": failed,
+            "confirmed": confirmed,
             "by_platform": {row[0]: row[1] for row in by_platform},
         }
 
@@ -220,3 +250,38 @@ class ApplicationTracker:
         for row in rows:
             writer.writerow(dict(row))
         return output.getvalue()
+
+    # ------------------------------------------------------------------
+    # Rate-limit event persistence
+    # ------------------------------------------------------------------
+
+    def add_rate_limit_event(self, platform: str, ts: float | None = None) -> None:
+        """Record a rate-limit application event for a platform."""
+        if ts is None:
+            ts = time.time()
+        conn = _get_conn(self.db_path)
+        conn.execute(
+            "INSERT INTO rate_limit_events (platform, applied_at) VALUES (?, ?)",
+            (platform, ts),
+        )
+        conn.commit()
+
+    def get_rate_limit_events(self, platform: str, since_ts: float) -> list[float]:
+        """Return application timestamps for a platform newer than since_ts."""
+        conn = _get_conn(self.db_path)
+        rows = conn.execute(
+            "SELECT applied_at FROM rate_limit_events WHERE platform=? AND applied_at > ?",
+            (platform, since_ts),
+        ).fetchall()
+        return [row[0] for row in rows]
+
+    def prune_rate_limit_events(self, older_than_ts: float | None = None) -> None:
+        """Delete rate-limit events older than older_than_ts (default: 24 hours ago)."""
+        if older_than_ts is None:
+            older_than_ts = time.time() - 86400
+        conn = _get_conn(self.db_path)
+        conn.execute(
+            "DELETE FROM rate_limit_events WHERE applied_at <= ?",
+            (older_than_ts,),
+        )
+        conn.commit()

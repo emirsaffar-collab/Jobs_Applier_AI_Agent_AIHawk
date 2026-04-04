@@ -196,6 +196,12 @@ class DateFiltersModel(BaseModel):
         }
 
 
+class SalaryModel(BaseModel):
+    min: int = 0
+    max: int = 0
+    currency: str = "USD"
+
+
 class WorkPreferences(BaseModel):
     remote: bool = True
     hybrid: bool = True
@@ -210,11 +216,14 @@ class WorkPreferences(BaseModel):
     company_blacklist: list[str] = ["wayfair", "Crossover"]
     title_blacklist: list[str] = ["word1", "word2"]
     location_blacklist: list[str] = ["Brazil"]
+    salary: SalaryModel = SalaryModel()
 
     @classmethod
     def from_yaml_dict(cls, data: dict) -> "WorkPreferences":
         date_data = data.get("date", {})
         date_model = DateFiltersModel.from_yaml_dict(date_data) if isinstance(date_data, dict) else DateFiltersModel()
+        salary_data = data.get("salary", {})
+        salary_model = SalaryModel(**salary_data) if isinstance(salary_data, dict) else SalaryModel()
         return cls(
             remote=data.get("remote", True),
             hybrid=data.get("hybrid", True),
@@ -229,6 +238,7 @@ class WorkPreferences(BaseModel):
             company_blacklist=data.get("company_blacklist") or [],
             title_blacklist=data.get("title_blacklist") or [],
             location_blacklist=data.get("location_blacklist") or [],
+            salary=salary_model,
         )
 
     def to_yaml_dict(self) -> dict:
@@ -246,6 +256,7 @@ class WorkPreferences(BaseModel):
             "company_blacklist": self.company_blacklist,
             "title_blacklist": self.title_blacklist,
             "location_blacklist": self.location_blacklist,
+            "salary": self.salary.model_dump(),
         }
 
 
@@ -1337,8 +1348,53 @@ async def bot_resume():
 async def bot_status():
     """Get current bot status and stats."""
     from src.automation.bot_manager import BotManager
+    from src.libs.llm.llm_logger import LLMLogger
     bot = BotManager()
-    return bot.get_status()
+    status_data = bot.get_status()
+    status_data["session_cost"] = LLMLogger.get_session_stats()
+    return status_data
+
+
+@app.get("/api/llm/cost-summary")
+async def llm_cost_summary():
+    """Return aggregated LLM cost statistics from the call log file and current session."""
+    import json
+    from src.libs.llm.llm_logger import LLMLogger
+
+    calls_log = Path("data_folder/output/open_ai_calls.json")
+    entries = []
+    if calls_log.exists():
+        try:
+            with open(calls_log, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            entries.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+        except OSError as exc:
+            logger.warning("Could not read LLM call log: {}", exc)
+
+    total_cost = sum(e.get("total_cost", 0.0) for e in entries)
+    total_tokens = sum(e.get("total_tokens", 0) for e in entries)
+
+    by_model: dict[str, dict] = {}
+    for e in entries:
+        model = e.get("model", "unknown")
+        if model not in by_model:
+            by_model[model] = {"calls": 0, "total_tokens": 0, "total_cost": 0.0}
+        by_model[model]["calls"] += 1
+        by_model[model]["total_tokens"] += e.get("total_tokens", 0)
+        by_model[model]["total_cost"] += e.get("total_cost", 0.0)
+
+    return {
+        "total_cost_usd": round(total_cost, 6),
+        "total_tokens": total_tokens,
+        "call_count": len(entries),
+        "by_model": by_model,
+        "session": LLMLogger.get_session_stats(),
+    }
 
 
 @app.websocket("/ws/bot")
@@ -1393,6 +1449,32 @@ async def update_credentials(body: CredentialsUpdate):
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Failed to save credentials: {exc}")
     return {"status": "ok", "message": "Credentials saved."}
+
+
+@app.get("/api/credentials/cookie-status")
+async def get_cookie_status():
+    """Return per-platform cookie file age so the UI can show staleness."""
+    import time
+    from src.automation.browser import COOKIES_DIR
+
+    platforms = ("linkedin", "indeed", "glassdoor", "ziprecruiter", "dice")
+    result: dict[str, dict] = {}
+    for platform in platforms:
+        cookie_path = COOKIES_DIR / f"{platform}.json"
+        if cookie_path.exists():
+            try:
+                mtime = cookie_path.stat().st_mtime
+                age_seconds = int(time.time() - mtime)
+                result[platform] = {
+                    "exists": True,
+                    "age_seconds": age_seconds,
+                    "age_hours": round(age_seconds / 3600, 1),
+                }
+            except OSError:
+                result[platform] = {"exists": False}
+        else:
+            result[platform] = {"exists": False}
+    return result
 
 
 # =============================================================================

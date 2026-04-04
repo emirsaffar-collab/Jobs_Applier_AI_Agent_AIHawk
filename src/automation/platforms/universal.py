@@ -1,7 +1,8 @@
 """Universal AI-driven job application handler.
 
 Applies to any career page URL using LLM-guided form filling.
-Inspired by ApplyPilot's universal form filling approach.
+Includes targeted strategies for common ATS platforms (Greenhouse, Lever,
+Workday, SmartRecruiters) with a generic fallback.
 """
 from __future__ import annotations
 
@@ -12,6 +13,43 @@ from playwright.async_api import Page, TimeoutError as PWTimeout
 
 from src.automation.platforms.base import BasePlatform, JobListing, ApplyResult
 from src.logging import logger
+
+# Regex to detect confirmation text on any post-submit page
+_CONFIRM_RE = re.compile(
+    r"application.*submitted|thank\s+you.*applying|we.*received.*application"
+    r"|your.*application.*sent|application.*received",
+    re.IGNORECASE,
+)
+
+
+def _detect_ats(url: str) -> str:
+    """Inspect a job URL and return a short ATS identifier string."""
+    url_lower = url.lower()
+    if "greenhouse.io" in url_lower or "boards.greenhouse.io" in url_lower:
+        return "greenhouse"
+    if "jobs.lever.co" in url_lower or "lever.co" in url_lower:
+        return "lever"
+    if "myworkdayjobs.com" in url_lower or "workday.com" in url_lower:
+        return "workday"
+    if "smartrecruiters.com" in url_lower:
+        return "smartrecruiters"
+    if "icims.com" in url_lower:
+        return "icims"
+    return "generic"
+
+
+async def _check_confirmation(page: Page) -> bool:
+    """Return True when a post-submit confirmation indicator is found."""
+    try:
+        url_lower = page.url.lower()
+        if any(p in url_lower for p in ("/confirmation", "/thank-you", "/success", "/applied", "/submitted")):
+            return True
+        body = (await page.text_content("body") or "").strip()
+        if _CONFIRM_RE.search(body):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 class UniversalPlatform(BasePlatform):
@@ -55,49 +93,210 @@ class UniversalPlatform(BasePlatform):
             await page.goto(url, wait_until="domcontentloaded", timeout=30000)
             await self._human_delay(2, 3)
 
-            # Find and click an "Apply" button
-            apply_btn = await page.query_selector(
-                "button:has-text('Apply'), a:has-text('Apply Now'), "
-                "button:has-text('Apply Now'), a:has-text('Apply')"
-            )
-            if apply_btn:
-                await apply_btn.click()
-                await self._human_delay(2, 3)
+            ats = _detect_ats(url)
+            logger.debug("Universal ATS detected: {} for {}", ats, url)
 
-            # Generic form filling loop
-            for step in range(10):
-                await self._human_delay(1, 2)
-                filled = await self._fill_all_inputs(page, resume_path, cover_letter_path)
+            if ats == "greenhouse":
+                return await self._apply_greenhouse(page, resume_path, cover_letter_path)
+            if ats == "lever":
+                return await self._apply_lever(page, resume_path, cover_letter_path)
+            if ats == "workday":
+                return await self._apply_workday(page, resume_path, cover_letter_path)
+            if ats == "smartrecruiters":
+                return await self._apply_smartrecruiters(page, resume_path, cover_letter_path)
+            # Generic / iCIMS fallback
+            return await self._apply_generic(page, resume_path, cover_letter_path)
 
-                # Try to submit
-                submit = await page.query_selector(
-                    "button[type='submit']:has-text('Submit'), "
-                    "button:has-text('Submit Application'), "
-                    "input[type='submit']"
-                )
-                if submit:
-                    await submit.click()
-                    await self._human_delay(2, 4)
-                    return ApplyResult(success=True)
-
-                # Try to advance
-                next_btn = await page.query_selector(
-                    "button:has-text('Next'), button:has-text('Continue'), "
-                    "button[type='submit']:not(:has-text('Submit'))"
-                )
-                if next_btn:
-                    await next_btn.click()
-                    continue
-
-                if not filled:
-                    break
-
-            return ApplyResult(skipped=True, reason="could not determine form flow")
         except PWTimeout:
             return ApplyResult(reason="timeout")
         except Exception as exc:
             logger.error("Universal apply error for {}: {}", url, exc)
             return ApplyResult(reason=str(exc))
+
+    # ------------------------------------------------------------------
+    # ATS-specific strategies
+    # ------------------------------------------------------------------
+
+    async def _apply_greenhouse(
+        self, page: Page, resume_path: str, cover_letter_path: str
+    ) -> ApplyResult:
+        """Greenhouse ATS strategy."""
+        # Click the apply button
+        for btn_sel in (
+            "a:has-text('Apply for this Job')",
+            "a:has-text('Apply')",
+            "button:has-text('Apply')",
+        ):
+            btn = await page.query_selector(btn_sel)
+            if btn:
+                await btn.click()
+                await self._human_delay(2, 3)
+                break
+
+        await self._fill_all_inputs(page, resume_path, cover_letter_path)
+        await self._human_delay(1, 2)
+
+        submit = await page.query_selector("input[type='submit'], button[type='submit']")
+        if submit:
+            await submit.click()
+            await self._human_delay(3, 5)
+            confirmed = await _check_confirmation(page)
+            return ApplyResult(success=True, confirmed=confirmed)
+
+        return ApplyResult(skipped=True, reason="greenhouse: submit button not found")
+
+    async def _apply_lever(
+        self, page: Page, resume_path: str, cover_letter_path: str
+    ) -> ApplyResult:
+        """Lever ATS strategy."""
+        for btn_sel in (
+            "a:has-text('Apply for this position')",
+            "a:has-text('Apply')",
+            "button:has-text('Apply')",
+        ):
+            btn = await page.query_selector(btn_sel)
+            if btn:
+                await btn.click()
+                await self._human_delay(2, 3)
+                break
+
+        await self._fill_all_inputs(page, resume_path, cover_letter_path)
+        await self._human_delay(1, 2)
+
+        submit = await page.query_selector(
+            "button[type='submit'], input[type='submit'], button:has-text('Submit Application')"
+        )
+        if submit:
+            await submit.click()
+            await self._human_delay(3, 5)
+            confirmed = await _check_confirmation(page)
+            return ApplyResult(success=True, confirmed=confirmed)
+
+        return ApplyResult(skipped=True, reason="lever: submit button not found")
+
+    async def _apply_workday(
+        self, page: Page, resume_path: str, cover_letter_path: str
+    ) -> ApplyResult:
+        """Workday ATS strategy — handles multi-step wizard."""
+        # Click Apply
+        for btn_sel in (
+            "a:has-text('Apply')",
+            "button:has-text('Apply')",
+            "[data-automation-id='applyButton']",
+        ):
+            btn = await page.query_selector(btn_sel)
+            if btn:
+                await btn.click()
+                await self._human_delay(3, 5)
+                break
+
+        max_steps = 15
+        for _ in range(max_steps):
+            await self._fill_all_inputs(page, resume_path, cover_letter_path)
+            await self._human_delay(1, 2)
+
+            # Check for submit
+            submit = await page.query_selector(
+                "[data-automation-id='bottom-navigation-next-button']:has-text('Submit')"
+                ", button:has-text('Submit')"
+            )
+            if submit:
+                await submit.click()
+                await self._human_delay(4, 6)
+                confirmed = await _check_confirmation(page)
+                return ApplyResult(success=True, confirmed=confirmed)
+
+            # Advance to next step
+            next_btn = await page.query_selector(
+                "[data-automation-id='bottom-navigation-next-button']"
+                ", button:has-text('Next')"
+                ", button:has-text('Save and Continue')"
+            )
+            if next_btn:
+                await next_btn.click()
+                await self._human_delay(2, 3)
+                continue
+
+            # No progress possible
+            break
+
+        return ApplyResult(skipped=True, reason="workday: could not complete wizard")
+
+    async def _apply_smartrecruiters(
+        self, page: Page, resume_path: str, cover_letter_path: str
+    ) -> ApplyResult:
+        """SmartRecruiters ATS strategy."""
+        for btn_sel in (
+            "button:has-text('Apply')",
+            "a:has-text('Apply')",
+            "[class*='apply-button']",
+        ):
+            btn = await page.query_selector(btn_sel)
+            if btn:
+                await btn.click()
+                await self._human_delay(2, 3)
+                break
+
+        await self._fill_all_inputs(page, resume_path, cover_letter_path)
+        await self._human_delay(1, 2)
+
+        submit = await page.query_selector(
+            "button[type='submit']:has-text('Send'), "
+            "button:has-text('Submit Application'), "
+            "button[type='submit']"
+        )
+        if submit:
+            await submit.click()
+            await self._human_delay(3, 5)
+            confirmed = await _check_confirmation(page)
+            return ApplyResult(success=True, confirmed=confirmed)
+
+        return ApplyResult(skipped=True, reason="smartrecruiters: submit button not found")
+
+    async def _apply_generic(
+        self, page: Page, resume_path: str, cover_letter_path: str
+    ) -> ApplyResult:
+        """Generic AI-driven strategy (original behaviour)."""
+        # Find and click an "Apply" button
+        apply_btn = await page.query_selector(
+            "button:has-text('Apply'), a:has-text('Apply Now'), "
+            "button:has-text('Apply Now'), a:has-text('Apply')"
+        )
+        if apply_btn:
+            await apply_btn.click()
+            await self._human_delay(2, 3)
+
+        for _step in range(10):
+            await self._human_delay(1, 2)
+            filled = await self._fill_all_inputs(page, resume_path, cover_letter_path)
+
+            submit = await page.query_selector(
+                "button[type='submit']:has-text('Submit'), "
+                "button:has-text('Submit Application'), "
+                "input[type='submit']"
+            )
+            if submit:
+                await submit.click()
+                await self._human_delay(2, 4)
+                confirmed = await _check_confirmation(page)
+                return ApplyResult(success=True, confirmed=confirmed)
+
+            next_btn = await page.query_selector(
+                "button:has-text('Next'), button:has-text('Continue'), "
+                "button[type='submit']:not(:has-text('Submit'))"
+            )
+            if next_btn:
+                await next_btn.click()
+                continue
+
+            if not filled:
+                break
+
+        return ApplyResult(skipped=True, reason="could not determine form flow")
+
+    # ------------------------------------------------------------------
+    # Form filling helpers (unchanged from original)
+    # ------------------------------------------------------------------
 
     async def _fill_all_inputs(
         self, page: Page, resume_path: str, cover_letter_path: str

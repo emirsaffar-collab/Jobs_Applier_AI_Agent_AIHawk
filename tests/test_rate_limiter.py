@@ -64,3 +64,42 @@ class TestRateLimiter:
         await rl.wait_cooldown("linkedin")
         elapsed = time.monotonic() - start
         assert elapsed < 1.0
+
+    def test_record_application_persists_to_tracker(self, tmp_path):
+        """record_application should write an event to the tracker DB."""
+        from src.automation.application_tracker import ApplicationTracker
+        tracker = ApplicationTracker(db_path=tmp_path / "rl.db")
+        rl = RateLimiter(default_limit=50)
+        rl.record_application("linkedin", tracker)
+        rl.record_application("linkedin", tracker)
+        events = tracker.get_rate_limit_events("linkedin", since_ts=0)
+        assert len(events) == 2
+
+    def test_load_from_db_restores_counts(self, tmp_path):
+        """A new RateLimiter loaded from DB should reflect previously-recorded events."""
+        from src.automation.application_tracker import ApplicationTracker
+        import time as _time
+
+        tracker = ApplicationTracker(db_path=tmp_path / "rl2.db")
+        # Simulate 3 applications recorded in a previous session
+        for _ in range(3):
+            tracker.add_rate_limit_event("linkedin", _time.time())
+
+        # Create a fresh limiter and load from DB
+        rl2 = RateLimiter(default_limit=5)
+        rl2.load_from_db(tracker)
+        assert rl2.remaining("linkedin") == 2  # 5 - 3 = 2
+
+    def test_prune_rate_limit_events(self, tmp_path):
+        """prune_rate_limit_events removes old rows."""
+        from src.automation.application_tracker import ApplicationTracker
+        import time as _time
+
+        tracker = ApplicationTracker(db_path=tmp_path / "rl3.db")
+        old_ts = _time.time() - 90000  # older than 24 h
+        recent_ts = _time.time() - 1000
+        tracker.add_rate_limit_event("linkedin", old_ts)
+        tracker.add_rate_limit_event("linkedin", recent_ts)
+        tracker.prune_rate_limit_events()
+        events = tracker.get_rate_limit_events("linkedin", since_ts=0)
+        assert len(events) == 1  # only the recent one remains

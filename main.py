@@ -19,16 +19,11 @@ from typing import List, Optional, Tuple, Dict
 import click
 import inquirer
 import yaml
-from selenium import webdriver
-from selenium.common.exceptions import WebDriverException
-from selenium.webdriver.chrome.service import Service as ChromeService
-from webdriver_manager.chrome import ChromeDriverManager
 import re
 from src.libs.resume_and_cover_builder import ResumeFacade, ResumeGenerator, StyleManager
 from src.resume_schemas.job_application_profile import JobApplicationProfile
 from src.resume_schemas.resume import Resume
 from src.logging import logger
-from src.utils.chrome_utils import init_browser
 from src.utils.constants import (
     PLAIN_TEXT_RESUME_YAML,
     SECRETS_YAML,
@@ -341,7 +336,13 @@ def _setup_facade(parameters: dict, llm_api_key: str, job_url: Optional[str] = N
 
     resume_generator = ResumeGenerator()
     resume_object = Resume(plain_text_resume)
-    driver = init_browser()
+    try:
+        from src.utils.chrome_utils import init_browser
+        driver = init_browser()
+    except (ImportError, Exception) as exc:
+        logger.warning("Selenium/Chrome not available for PDF generation: {}. "
+                       "Use 'python main.py web' for a full-featured experience.", exc)
+        driver = None
     resume_generator.set_resume_object(resume_object)
 
     resume_facade = ResumeFacade(

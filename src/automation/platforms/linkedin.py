@@ -87,9 +87,8 @@ class LinkedInPlatform(BasePlatform):
             logger.warning("LinkedIn credentials missing.")
             return False
 
-        # Check if already logged in via cookies
-        await page.goto("https://www.linkedin.com/feed", wait_until="domcontentloaded", timeout=30000)
-        if await self._is_logged_in(page):
+        # Check if already logged in via cookies (freshness check)
+        if await self._cookies_are_fresh(page):
             logger.info("LinkedIn: already logged in via cookies.")
             return True
 
@@ -116,6 +115,14 @@ class LinkedInPlatform(BasePlatform):
 
         return await self._is_logged_in(page)
 
+    async def _cookies_are_fresh(self, page: Page) -> bool:
+        """Return True if existing cookies already grant LinkedIn feed access."""
+        try:
+            await page.goto("https://www.linkedin.com/feed", wait_until="domcontentloaded", timeout=20000)
+            return await self._is_logged_in(page)
+        except Exception:
+            return False
+
     # ------------------------------------------------------------------
     # 2FA / security-challenge handling
     # ------------------------------------------------------------------
@@ -128,6 +135,42 @@ class LinkedInPlatform(BasePlatform):
         is_headless = getattr(browser_manager, "headless", False) if browser_manager else False
         timeout = cfg.TWO_FA_TIMEOUT_SECONDS
 
+        # --- TOTP auto-fill (works in headless mode) ---
+        totp_secret = getattr(cfg, "TWO_FA_OTP_SECRET", "")
+        if totp_secret:
+            try:
+                import pyotp
+                totp = pyotp.TOTP(totp_secret)
+                code = totp.now()
+                # Try common OTP input selectors
+                for sel in (
+                    "input[name='pin']",
+                    "input[id*='otp']",
+                    "input[id*='verification']",
+                    "input[autocomplete='one-time-code']",
+                    "input[type='text']",
+                ):
+                    try:
+                        field = await page.wait_for_selector(sel, timeout=3000, state="visible")
+                        if field:
+                            await field.fill(code)
+                            await self._human_delay(0.5, 1.0)
+                            await page.keyboard.press("Enter")
+                            await self._human_delay(3, 5)
+                            if await self._is_logged_in(page):
+                                logger.info("LinkedIn 2FA completed via TOTP.")
+                                return True
+                            break
+                    except PWTimeout:
+                        continue
+            except ImportError:
+                logger.warning(
+                    "TWO_FA_OTP_SECRET is set but 'pyotp' is not installed. "
+                    "Install it with: pip install pyotp"
+                )
+            except Exception as exc:
+                logger.warning("TOTP 2FA attempt failed: {}", exc)
+
         if is_headless:
             logger.error(
                 "LinkedIn 2FA/security check detected, but the browser is "
@@ -135,7 +178,8 @@ class LinkedInPlatform(BasePlatform):
                 "visible browser window.\n"
                 "  → Run the bot once with headless=false to complete 2FA.\n"
                 "  → After that, cookies will be saved and headless mode will "
-                "work for subsequent runs."
+                "work for subsequent runs.\n"
+                "  → Alternatively, set TWO_FA_OTP_SECRET env var for automatic TOTP."
             )
             self.last_login_failure_reason = "2fa_headless"
             return False
@@ -327,7 +371,33 @@ class LinkedInPlatform(BasePlatform):
         if work_types:
             params["f_WT"] = ",".join(work_types)
 
+        # Salary filter (LinkedIn f_SB2 buckets)
+        salary = prefs.get("salary", {})
+        sal_min = salary.get("min", 0) if isinstance(salary, dict) else 0
+        if sal_min > 0:
+            bucket = self._salary_bucket(sal_min)
+            if bucket:
+                params["f_SB2"] = bucket
+
         return self.JOBS_BASE + "?" + urllib.parse.urlencode(params)
+
+    @staticmethod
+    def _salary_bucket(min_salary: int) -> str | None:
+        """Map a minimum annual salary to LinkedIn's f_SB2 bucket parameter."""
+        # LinkedIn salary buckets (approximate annual USD thresholds)
+        if min_salary >= 140000:
+            return "6"
+        if min_salary >= 120000:
+            return "5"
+        if min_salary >= 100000:
+            return "4"
+        if min_salary >= 80000:
+            return "3"
+        if min_salary >= 60000:
+            return "2"
+        if min_salary >= 40000:
+            return "1"
+        return None
 
     async def _scrape_search_page(
         self,
@@ -439,8 +509,9 @@ class LinkedInPlatform(BasePlatform):
             # Check if modal is open
             modal = await page.query_selector(_SEL["modal"])
             if not modal:
-                # Modal closed — application may have submitted
-                return ApplyResult(success=True)
+                # Modal closed — check for a confirmation indicator
+                confirmed = await self._verify_submission(page)
+                return ApplyResult(success=True, confirmed=confirmed)
 
             # Fill form fields on current step
             await self._fill_form_fields(page, resume_path, cover_letter_path)
@@ -459,7 +530,8 @@ class LinkedInPlatform(BasePlatform):
             if submit_btn:
                 await submit_btn.click()
                 await self._human_delay(2, 4)
-                return ApplyResult(success=True)
+                confirmed = await self._verify_submission(page)
+                return ApplyResult(success=True, confirmed=confirmed)
 
             review_btn = await page.query_selector(_SEL["review_btn"])
             if review_btn:
@@ -502,6 +574,47 @@ class LinkedInPlatform(BasePlatform):
             return ApplyResult(skipped=True, reason="stuck on step")
 
         return ApplyResult(skipped=True, reason="exceeded max steps")
+
+    async def _verify_submission(self, page: Page) -> bool:
+        """Check for post-submit confirmation indicators on the LinkedIn page.
+
+        Returns True when a confirmation signal is detected, False otherwise.
+        """
+        try:
+            # Wait briefly for the page to settle
+            await asyncio.sleep(2)
+
+            # 1. LinkedIn success feedback element
+            feedback = await page.query_selector(".artdeco-inline-feedback--success")
+            if feedback:
+                return True
+
+            # 2. "Your application was sent" toast / heading text
+            for selector in (
+                "text=Your application was sent",
+                "text=Application submitted",
+                "h3:has-text('submitted')",
+            ):
+                try:
+                    el = await page.query_selector(selector)
+                    if el and await el.is_visible():
+                        return True
+                except Exception:
+                    pass
+
+            # 3. URL redirect to recommended jobs (LinkedIn often redirects here)
+            if "/jobs/collections/recommended" in page.url:
+                return True
+
+            # 4. Generic confirmation URL patterns
+            url_lower = page.url.lower()
+            if any(p in url_lower for p in ("/confirmation", "/thank-you", "/success", "/applied")):
+                return True
+
+        except Exception as exc:
+            logger.debug("LinkedIn _verify_submission error: {}", exc)
+
+        return False
 
     async def _fill_form_fields(
         self, page: Page, resume_path: str, cover_letter_path: str

@@ -137,6 +137,7 @@ class BotManager:
     def _reset_stats(self) -> None:
         self.stats = {
             "applied": 0,
+            "confirmed": 0,
             "skipped": 0,
             "failed": 0,
             "current_platform": "",
@@ -171,16 +172,29 @@ class BotManager:
         from src.automation.rate_limiter import RateLimiter
         from src.automation.recruiter_outreach import RecruiterOutreach
         from src.automation.platforms import get_platform
-        from src.utils.captcha_solver import CaptchaSolver
+        from src.utils.captcha_solver import create_captcha_solver
+        import config as cfg
 
         browser = BrowserManager(headless=config.headless, proxies=config.proxies)
         tracker = ApplicationTracker()
-        captcha_solver = CaptchaSolver(api_key=config.capsolver_api_key)
+        captcha_provider = getattr(cfg, "CAPTCHA_PROVIDER", "capsolver")
+        if captcha_provider == "2captcha":
+            captcha_api_key = getattr(cfg, "TWOCAPTCHA_API_KEY", "") or config.capsolver_api_key
+        elif captcha_provider == "anticaptcha":
+            captcha_api_key = getattr(cfg, "ANTICAPTCHA_API_KEY", "") or config.capsolver_api_key
+        else:
+            captcha_api_key = config.capsolver_api_key
+        captcha_solver = create_captcha_solver(captcha_provider, captcha_api_key)
         rate_limiter = RateLimiter(
             limits=config.rate_limits,
             default_limit=config.rate_limit_default,
             cooldown_minutes=config.rate_limit_cooldown_minutes,
         )
+        # Load persisted rate-limit events from SQLite so daily caps survive restarts
+        try:
+            rate_limiter.load_from_db(tracker)
+        except Exception as _rl_exc:
+            self._log(f"Warning: could not load rate-limit history: {_rl_exc}")
 
         # Build LLM model for ranking
         try:
@@ -207,7 +221,7 @@ class BotManager:
             ))
 
         if captcha_solver.enabled:
-            self._log("CAPTCHA solving enabled (CAPSolver).")
+            self._log(f"CAPTCHA solving enabled ({captcha_provider}).")
         if config.proxies:
             self._log(f"Proxy rotation enabled ({len(config.proxies)} proxies).")
         self._log(f"Rate limiting: {rate_limiter.get_limit('default')}/day default, "
@@ -331,6 +345,16 @@ class BotManager:
                     else:
                         self._log(f"No description available, applying anyway: {title} @ {company}")
 
+                    # Salary filter (post-fetch, for platforms without native salary URL params)
+                    salary_prefs = config.preferences.get("salary", {})
+                    if salary_prefs and salary_prefs.get("min", 0):
+                        from src.automation.platforms.base import BasePlatform
+                        if not BasePlatform._salary_matches(description, salary_prefs):
+                            tracker.mark_skipped(url, f"salary below {salary_prefs['min']}")
+                            self.stats["skipped"] += 1
+                            self._log(f"Skip (salary): {title} @ {company}")
+                            continue
+
                     # Optionally generate tailored resume
                     resume_path = ""
                     cover_path = ""
@@ -362,10 +386,18 @@ class BotManager:
 
                         if result_success:
                             tracker.mark_applied(url, resume_path, cover_path)
-                            rate_limiter.record_application(platform_name)
+                            rate_limiter.record_application(platform_name, tracker)
                             self.stats["applied"] += 1
                             total_applied += 1
-                            self._log(f"Applied: {title} @ {company}")
+
+                            # Post-submit confirmation
+                            result_confirmed = getattr(result, "confirmed", False)
+                            if result_confirmed:
+                                tracker.mark_confirmed(url)
+                                self.stats["confirmed"] += 1
+                                self._log(f"✅ Confirmed: {title} @ {company}")
+                            else:
+                                self._log(f"📤 Applied (unconfirmed): {title} @ {company}")
 
                             # Recruiter outreach (LinkedIn only, after successful apply)
                             recruiter_link = getattr(job, "extra", {}).get("recruiter_link", "") if hasattr(job, "extra") else (job.get("recruiter_link", "") if isinstance(job, dict) else "")
