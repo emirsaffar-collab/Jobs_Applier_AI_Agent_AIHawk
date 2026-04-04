@@ -395,11 +395,10 @@ def create_cover_letter(parameters: dict, llm_api_key: str):
         _save_pdf(result_base64, output_dir, "cover_letter_tailored.pdf")
     except Exception as e:
         logger.exception(f"An error occurred while creating the cover letter: {e}")
-        # Ensure driver is cleaned up on error (create_cover_letter calls quit on success)
         if driver:
             try:
                 driver.quit()
-            except Exception:
+            except (OSError, WebDriverException):
                 pass
         raise
 
@@ -424,7 +423,7 @@ def create_resume_pdf_job_tailored(parameters: dict, llm_api_key: str):
         if driver:
             try:
                 driver.quit()
-            except Exception:
+            except (OSError, WebDriverException):
                 pass
         raise
 
@@ -445,7 +444,7 @@ def create_resume_pdf(parameters: dict, llm_api_key: str):
         if driver:
             try:
                 driver.quit()
-            except Exception:
+            except (OSError, WebDriverException):
                 pass
         raise
 

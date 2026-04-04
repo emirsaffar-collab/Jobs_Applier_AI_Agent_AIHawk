@@ -7,7 +7,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
 
-from playwright.async_api import Page
+from playwright.async_api import Page, TimeoutError as PWTimeout
+
+from src.logging import logger
 
 
 @dataclass
@@ -82,10 +84,14 @@ class BasePlatform(ABC):
             try:
                 await page.click(selector, timeout=timeout)
                 return True
-            except Exception:
+            except PWTimeout:
                 if attempt < retries:
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
+                logger.debug("_safe_click timed out for selector '{}' after {} retries", selector, retries)
+                return False
+            except Exception as exc:
+                logger.debug("_safe_click error for selector '{}': {}", selector, exc)
                 return False
 
     async def _safe_fill(self, page: Page, selector: str, value: str, *, timeout: int = 5000, retries: int = 2) -> bool:
@@ -94,10 +100,14 @@ class BasePlatform(ABC):
             try:
                 await page.fill(selector, value, timeout=timeout)
                 return True
-            except Exception:
+            except PWTimeout:
                 if attempt < retries:
                     await asyncio.sleep(0.5 * (attempt + 1))
                     continue
+                logger.debug("_safe_fill timed out for selector '{}' after {} retries", selector, retries)
+                return False
+            except Exception as exc:
+                logger.debug("_safe_fill error for selector '{}': {}", selector, exc)
                 return False
 
     async def _check_and_solve_captcha(self, page: Page) -> bool:
@@ -108,8 +118,10 @@ class BasePlatform(ABC):
             if cfg.CAPSOLVER_API_KEY:
                 solver = CaptchaSolver(api_key=cfg.CAPSOLVER_API_KEY)
                 return await detect_and_solve_captcha(page, solver)
-        except Exception:
-            pass
+        except ImportError:
+            logger.debug("CAPTCHA solver not available")
+        except Exception as exc:
+            logger.warning("CAPTCHA solving failed: {}", exc)
         return False
 
     async def _answer_text_field(self, page: Page, selector: str, question: str) -> None:
@@ -123,7 +135,11 @@ class BasePlatform(ABC):
             if hasattr(answer, "content"):
                 answer = answer.content
             await page.fill(selector, str(answer).strip())
-        except Exception:
+        except (PWTimeout, OSError) as exc:
+            logger.debug("Failed to fill text field '{}': {}", selector, exc)
+            await page.fill(selector, "Yes")
+        except Exception as exc:
+            logger.warning("LLM answer_text_field error for '{}': {}", question[:80], exc)
             await page.fill(selector, "Yes")
 
     async def _answer_with_llm(self, question: str, options: list[str] | None = None) -> str:
@@ -141,5 +157,6 @@ class BasePlatform(ABC):
             if hasattr(result, "content"):
                 result = result.content
             return str(result).strip()
-        except Exception:
+        except Exception as exc:
+            logger.warning("LLM answer_with_llm error for '{}': {}", question[:80], exc)
             return options[0] if options else "Yes"

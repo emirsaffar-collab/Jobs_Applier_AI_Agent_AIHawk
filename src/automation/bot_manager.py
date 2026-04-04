@@ -155,7 +155,8 @@ class BotManager:
         for cb in list(self._progress_callbacks):
             try:
                 asyncio.create_task(cb(entry))
-            except Exception:
+            except RuntimeError:
+                # No running event loop — ignore callback
                 pass
 
     # ------------------------------------------------------------------

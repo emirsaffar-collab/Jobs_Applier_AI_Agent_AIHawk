@@ -6,7 +6,9 @@ and an automated job application bot supporting LinkedIn, Indeed, Glassdoor, Zip
 import asyncio
 import base64
 import hashlib
+import hmac
 import os
+import sqlite3
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -39,7 +41,7 @@ class _OptionalAuthMiddleware(BaseHTTPMiddleware):
         if path in self.EXEMPT_PATHS or path.startswith("/ws/"):
             return await call_next(request)
         auth = request.headers.get("Authorization", "")
-        if auth != f"Bearer {_WEB_API_KEY}":
+        if not hmac.compare_digest(auth, f"Bearer {_WEB_API_KEY}"):
             from fastapi.responses import JSONResponse
             return JSONResponse(status_code=401, content={"detail": "Unauthorized. Set Authorization: Bearer <WEB_API_KEY> header."})
         return await call_next(request)
@@ -115,15 +117,15 @@ def _persist_generation(job_id: str, action: str, status: str,
         )
         conn.commit()
         conn.close()
-    except Exception as exc:
-        logger.warning(f"Failed to persist generation history: {exc}")
+    except (OSError, sqlite3.Error) as exc:
+        logger.error(f"Failed to persist generation history: {exc}")
 
 
 # Initialize table on import
 try:
     _init_gen_table()
-except Exception:
-    pass
+except (OSError, ImportError) as exc:
+    logger.warning("Failed to initialize generation history table: {}", exc)
 
 
 class GenerateRequest(BaseModel):
@@ -259,56 +261,9 @@ APPROVED_DISTANCES = {0, 5, 10, 25, 50, 100}
 
 
 def _validate_work_preferences(data: dict) -> list[str]:
-    """Validate work preferences dict using the same rules as ConfigValidator."""
-    errors = []
-
-    # Validate experience levels are booleans
-    exp = data.get("experience_level", {})
-    if not isinstance(exp, dict):
-        errors.append("experience_level must be a dict")
-    else:
-        for level in ["internship", "entry", "associate", "mid_senior_level", "director", "executive"]:
-            if level in exp and not isinstance(exp[level], bool):
-                errors.append(f"Experience level '{level}' must be a boolean")
-
-    # Validate job types are booleans
-    jt = data.get("job_types", {})
-    if not isinstance(jt, dict):
-        errors.append("job_types must be a dict")
-    else:
-        for job_type in ["full_time", "contract", "part_time", "temporary", "internship", "other", "volunteer"]:
-            if job_type in jt and not isinstance(jt[job_type], bool):
-                errors.append(f"Job type '{job_type}' must be a boolean")
-
-    # Validate date filters are booleans
-    date = data.get("date", {})
-    if not isinstance(date, dict):
-        errors.append("date must be a dict")
-    else:
-        for df in ["all_time", "month", "week", "24_hours"]:
-            if df in date and not isinstance(date[df], bool):
-                errors.append(f"Date filter '{df}' must be a boolean")
-
-    # Validate positions and locations are lists of strings
-    for key in ["positions", "locations"]:
-        val = data.get(key, [])
-        if not isinstance(val, list) or not all(isinstance(item, str) for item in val):
-            errors.append(f"'{key}' must be a list of strings")
-
-    # Validate distance
-    dist = data.get("distance")
-    if dist not in APPROVED_DISTANCES:
-        errors.append(f"distance must be one of {sorted(APPROVED_DISTANCES)}")
-
-    # Validate blacklists are lists
-    for bl in ["company_blacklist", "title_blacklist", "location_blacklist"]:
-        val = data.get(bl)
-        if val is None:
-            continue
-        if not isinstance(val, list):
-            errors.append(f"'{bl}' must be a list")
-
-    return errors
+    """Validate work preferences dict using the shared validator."""
+    from src.utils.config_validator import validate_work_preferences
+    return validate_work_preferences(data)
 
 
 # WebSocket connection manager
@@ -338,7 +293,7 @@ class ConnectionManager:
             for ws in self.active_connections[job_id]:
                 try:
                     await ws.send_json(data)
-                except Exception:
+                except (WebSocketDisconnect, RuntimeError, OSError):
                     disconnected.append(ws)
             for ws in disconnected:
                 self.disconnect(ws, job_id)
@@ -363,7 +318,8 @@ def _get_available_styles() -> dict:
                         if "$" in content:
                             style_name, author_link = content.split("$", 1)
                             styles[style_name.strip()] = (file_path.name, author_link.strip())
-            except Exception:
+            except (OSError, ValueError) as exc:
+                logger.debug("Skipping style file {}: {}", file_path.name, exc)
                 continue
     return styles
 
@@ -603,9 +559,9 @@ def _html_to_pdf_without_selenium(html_content: str) -> str:
         finally:
             try:
                 driver.quit()
-            except Exception:
+            except (OSError, RuntimeError):
                 pass
-    except Exception:
+    except (ImportError, OSError, RuntimeError):
         # Fallback: use reportlab to create a basic PDF
         logger.warning("Chrome not available, using reportlab PDF fallback")
         return _reportlab_pdf_from_html(html_content)
@@ -745,8 +701,8 @@ async def setup_status():
             if isinstance(data, dict) and data.get("personal_information"):
                 pi = data["personal_information"]
                 resume_ok = bool(pi.get("name") or pi.get("surname"))
-        except Exception:
-            pass
+        except (yaml.YAMLError, OSError) as exc:
+            logger.debug("Could not read resume for setup check: {}", exc)
 
     # Preferences configured?
     prefs_ok = False
@@ -758,8 +714,8 @@ async def setup_status():
                 locations = data.get("locations", [])
                 # Consider configured if user has set real values (not just defaults)
                 prefs_ok = bool(positions and locations)
-        except Exception:
-            pass
+        except (yaml.YAMLError, OSError) as exc:
+            logger.debug("Could not read preferences for setup check: {}", exc)
 
     # Credentials per platform
     creds = _load_credentials()
@@ -801,7 +757,8 @@ async def get_generation_history(limit: int = 50):
         ).fetchall()
         conn.close()
         return {"history": [dict(r) for r in rows]}
-    except Exception as exc:
+    except (OSError, sqlite3.Error) as exc:
+        logger.error("Failed to load generation history: {}", exc)
         return {"history": [], "error": str(exc)}
 
 
@@ -1263,7 +1220,8 @@ def _load_credentials() -> dict:
     if CREDENTIALS_PATH.exists():
         try:
             return yaml.safe_load(CREDENTIALS_PATH.read_text()) or {}
-        except Exception:
+        except (yaml.YAMLError, OSError) as exc:
+            logger.warning("Failed to load credentials: {}", exc)
             return {}
     return {}
 
@@ -1277,7 +1235,8 @@ def _load_preferences() -> dict:
     if WORK_PREFERENCES_PATH.exists():
         try:
             return yaml.safe_load(WORK_PREFERENCES_PATH.read_text()) or {}
-        except Exception:
+        except (yaml.YAMLError, OSError) as exc:
+            logger.warning("Failed to load preferences: {}", exc)
             return {}
     return {}
 
@@ -1335,7 +1294,7 @@ async def bot_start(request: BotStartRequest):
         for ws in _bot_connections:
             try:
                 await ws.send_json({"type": "log", **entry, **bot.get_status()})
-            except Exception:
+            except (WebSocketDisconnect, RuntimeError, OSError):
                 dead.append(ws)
         for ws in dead:
             if ws in _bot_connections:

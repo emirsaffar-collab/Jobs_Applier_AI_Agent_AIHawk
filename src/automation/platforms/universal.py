@@ -166,18 +166,14 @@ class UniversalPlatform(BasePlatform):
                 label = await page.query_selector(f"label[for='{el_id}']")
                 if label:
                     return (await label.text_content() or "").strip()
-        except Exception:
-            pass
-        try:
             aria = await element.get_attribute("aria-label")
             if aria:
                 return aria.strip()
-        except Exception:
-            pass
-        try:
             placeholder = await element.get_attribute("placeholder")
             if placeholder:
                 return placeholder.strip()
-        except Exception:
-            pass
+        except PWTimeout:
+            logger.debug("Timeout getting label text for element")
+        except Exception as exc:
+            logger.debug("Error getting label text: {}", exc)
         return ""
