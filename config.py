@@ -51,8 +51,11 @@ LLM_API_KEY = os.environ.get('LLM_API_KEY', '')
 LINKEDIN_EMAIL = os.environ.get('LINKEDIN_EMAIL', '')
 LINKEDIN_PASSWORD = os.environ.get('LINKEDIN_PASSWORD', '')
 
-# CAPTCHA solving (CAPSolver)
+# CAPTCHA solving
 CAPSOLVER_API_KEY = os.environ.get('CAPSOLVER_API_KEY', '')
+CAPTCHA_PROVIDER = os.environ.get('CAPTCHA_PROVIDER', 'capsolver')  # capsolver | 2captcha | anticaptcha
+TWOCAPTCHA_API_KEY = os.environ.get('TWOCAPTCHA_API_KEY', '')
+ANTICAPTCHA_API_KEY = os.environ.get('ANTICAPTCHA_API_KEY', '')
 
 # Proxy rotation — comma-separated list of proxy URLs
 # e.g. "http://user:pass@host1:8080,http://host2:8080"
@@ -69,6 +72,8 @@ RATE_LIMIT_COOLDOWN_MINUTES = _safe_float('RATE_LIMIT_COOLDOWN_MINUTES', 5.0)
 
 # Two-factor authentication timeout (seconds) — how long to wait for manual 2FA completion
 TWO_FA_TIMEOUT_SECONDS = _safe_int('TWO_FA_TIMEOUT_SECONDS', 300)
+# Optional TOTP secret for LinkedIn — set to skip manual 2FA (base32 encoded)
+TWO_FA_OTP_SECRET = os.environ.get('TWO_FA_OTP_SECRET', '')
 
 # Web server configuration
 WEB_HOST = os.environ.get('WEB_HOST', '0.0.0.0')

@@ -22,8 +22,12 @@ import random
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from src.logging import logger
+
+if TYPE_CHECKING:
+    from src.automation.application_tracker import ApplicationTracker
 
 WINDOW_SECONDS = 86400  # 24 hours
 
@@ -71,10 +75,67 @@ class RateLimiter:
         count = self._windows[platform].count_in_window()
         return max(0, limit - count)
 
-    def record_application(self, platform: str) -> None:
-        """Record that an application was sent on this platform."""
+    def record_application(self, platform: str, tracker: "ApplicationTracker | None" = None) -> None:
+        """Record that an application was sent on this platform.
+
+        If a tracker is provided the event is persisted to SQLite so counts
+        survive a process restart.
+        """
         self._windows[platform].record()
         self._last_apply[platform] = time.monotonic()
+        if tracker is not None:
+            try:
+                tracker.add_rate_limit_event(platform)
+            except Exception as exc:
+                logger.warning("Failed to persist rate-limit event for {}: {}", platform, exc)
+
+    def load_from_db(self, tracker: "ApplicationTracker") -> None:
+        """Pre-populate in-memory windows from persisted events in SQLite.
+
+        Loads all events from the past 24 hours so daily caps are respected
+        even after a crash or restart.
+        """
+        now_wall = time.time()
+        since_wall = now_wall - WINDOW_SECONDS
+
+        # Collect every distinct platform that has events
+        all_platforms = set(self._limits.keys())
+        try:
+            from src.automation.application_tracker import _get_conn
+            conn = _get_conn(tracker.db_path)
+            rows = conn.execute(
+                "SELECT DISTINCT platform FROM rate_limit_events WHERE applied_at > ?",
+                (since_wall,),
+            ).fetchall()
+            all_platforms.update(row[0] for row in rows)
+        except Exception as exc:
+            logger.warning("Could not load platform list from rate_limit_events: {}", exc)
+            return
+
+        # Offset between wall-clock (stored) and monotonic (used for window checks)
+        # We approximate by mapping stored timestamps to fake monotonic values that
+        # will expire at the correct real-world time.
+        mono_now = time.monotonic()
+        wall_to_mono_offset = mono_now - now_wall
+
+        loaded_total = 0
+        for platform in all_platforms:
+            try:
+                timestamps = tracker.get_rate_limit_events(platform, since_wall)
+            except Exception as exc:
+                logger.warning("Failed to load rate-limit events for {}: {}", platform, exc)
+                continue
+            # Convert wall-clock timestamps to approximate monotonic equivalents
+            mono_timestamps = [ts + wall_to_mono_offset for ts in timestamps]
+            if mono_timestamps:
+                self._windows[platform].timestamps.extend(mono_timestamps)
+                loaded_total += len(mono_timestamps)
+
+        if loaded_total:
+            logger.info(
+                "RateLimiter: loaded {} persisted event(s) from DB (past 24 h).",
+                loaded_total,
+            )
 
     async def wait_cooldown(self, platform: str) -> None:
         """Wait for the cooldown period between applications.

@@ -32,6 +32,7 @@ class ApplyResult:
     success: bool = False
     skipped: bool = False
     reason: str = ""
+    confirmed: bool = False  # True when post-submit confirmation was verified
 
 
 class BasePlatform(ABC):
@@ -113,10 +114,18 @@ class BasePlatform(ABC):
     async def _check_and_solve_captcha(self, page: Page) -> bool:
         """Detect and solve CAPTCHAs on the current page. Returns True if solved."""
         try:
-            from src.utils.captcha_solver import CaptchaSolver, detect_and_solve_captcha
+            from src.utils.captcha_solver import create_captcha_solver, detect_and_solve_captcha
             import config as cfg
-            if cfg.CAPSOLVER_API_KEY:
-                solver = CaptchaSolver(api_key=cfg.CAPSOLVER_API_KEY)
+            # Determine which API key to use for the configured provider
+            provider = getattr(cfg, "CAPTCHA_PROVIDER", "capsolver")
+            if provider == "2captcha":
+                api_key = getattr(cfg, "TWOCAPTCHA_API_KEY", "") or cfg.CAPSOLVER_API_KEY
+            elif provider == "anticaptcha":
+                api_key = getattr(cfg, "ANTICAPTCHA_API_KEY", "") or cfg.CAPSOLVER_API_KEY
+            else:
+                api_key = cfg.CAPSOLVER_API_KEY
+            if api_key:
+                solver = create_captcha_solver(provider, api_key)
                 return await detect_and_solve_captcha(page, solver)
         except ImportError:
             logger.debug("CAPTCHA solver not available")
@@ -160,3 +169,42 @@ class BasePlatform(ABC):
         except Exception as exc:
             logger.warning("LLM answer_with_llm error for '{}': {}", question[:80], exc)
             return options[0] if options else "Yes"
+
+    @staticmethod
+    def _salary_matches(description: str, salary_prefs: dict) -> bool:
+        """Check whether a job description satisfies the configured salary filter.
+
+        Returns True when:
+        - No salary filter is configured (min == 0).
+        - A salary figure is found in the description that meets the minimum.
+        - No salary figure can be extracted from the description (benefit of the doubt).
+        """
+        import re as _re
+        sal_min = salary_prefs.get("min", 0) if isinstance(salary_prefs, dict) else 0
+        if not sal_min:
+            return True  # no filter
+
+        # Extract salary-like numbers from the description
+        # Matches patterns like $80k, $80,000, $80K, 80K, 80,000
+        raw_numbers: list[int] = []
+        for match in _re.finditer(
+            r"\$?\s*(\d{1,3}(?:,\d{3})*|\d+)\s*[kK]?\b", description or ""
+        ):
+            num_str = match.group(1).replace(",", "")
+            try:
+                num = int(num_str)
+            except ValueError:
+                continue
+            # Determine if 'k' suffix present
+            full = match.group(0)
+            if "k" in full.lower():
+                num *= 1000
+            # Only treat numbers in a plausible salary range (20K–2M)
+            if 20_000 <= num <= 2_000_000:
+                raw_numbers.append(num)
+
+        if not raw_numbers:
+            # Cannot determine salary — do not filter out
+            return True
+
+        return max(raw_numbers) >= sal_min

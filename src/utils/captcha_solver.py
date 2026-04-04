@@ -1,6 +1,7 @@
-"""CAPTCHA solving integration via CAPSolver (hCaptcha, reCAPTCHA v2/v3, Turnstile).
+"""CAPTCHA solving integration supporting CAPSolver, 2Captcha, and AntiCaptcha.
 
-Set CAPSOLVER_API_KEY in your environment or secrets.yaml to enable.
+Set CAPSOLVER_API_KEY (or TWOCAPTCHA_API_KEY / ANTICAPTCHA_API_KEY) in your
+environment and configure CAPTCHA_PROVIDER to select the provider.
 When no key is configured the solver simply returns None so the bot can
 continue (some platforms won't show CAPTCHAs at all).
 """
@@ -8,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from abc import ABC, abstractmethod
 from typing import Any
 
 import httpx
@@ -15,8 +17,10 @@ import httpx
 from src.logging import logger
 
 CAPSOLVER_BASE = "https://api.capsolver.com"
+TWOCAPTCHA_BASE = "https://api.2captcha.com"
+ANTICAPTCHA_BASE = "https://api.anti-captcha.com"
 
-# Supported CAPTCHA task types
+# Supported CAPTCHA task types (CAPSolver names)
 TASK_TYPES = {
     "hcaptcha":      "HCaptchaTaskProxyLess",
     "recaptcha_v2":  "ReCaptchaV2TaskProxyLess",
@@ -25,7 +29,40 @@ TASK_TYPES = {
 }
 
 
-class CaptchaSolver:
+# ---------------------------------------------------------------------------
+# Abstract base
+# ---------------------------------------------------------------------------
+
+class CaptchaProvider(ABC):
+    """Common interface for CAPTCHA-solving providers."""
+
+    @property
+    @abstractmethod
+    def enabled(self) -> bool: ...
+
+    @abstractmethod
+    async def solve_hcaptcha(self, website_url: str, site_key: str) -> str | None: ...
+
+    @abstractmethod
+    async def solve_recaptcha_v2(self, website_url: str, site_key: str) -> str | None: ...
+
+    @abstractmethod
+    async def solve_recaptcha_v3(
+        self, website_url: str, site_key: str, page_action: str = ""
+    ) -> str | None: ...
+
+    @abstractmethod
+    async def solve_turnstile(self, website_url: str, site_key: str) -> str | None: ...
+
+    @abstractmethod
+    async def close(self) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# CAPSolver provider (original)
+# ---------------------------------------------------------------------------
+
+class CapSolverProvider(CaptchaProvider):
     """Thin async wrapper around the CAPSolver API."""
 
     def __init__(self, api_key: str = ""):
@@ -45,12 +82,7 @@ class CaptchaSolver:
         if self._client and not self._client.is_closed:
             await self._client.aclose()
 
-    # ------------------------------------------------------------------
-    # Public solving methods
-    # ------------------------------------------------------------------
-
     async def solve_hcaptcha(self, website_url: str, site_key: str) -> str | None:
-        """Solve an hCaptcha challenge. Returns the response token or None."""
         return await self._solve(
             task_type=TASK_TYPES["hcaptcha"],
             website_url=website_url,
@@ -84,10 +116,6 @@ class CaptchaSolver:
             website_key=site_key,
         )
 
-    # ------------------------------------------------------------------
-    # Generic solver
-    # ------------------------------------------------------------------
-
     async def _solve(
         self,
         task_type: str,
@@ -107,7 +135,6 @@ class CaptchaSolver:
             **extra,
         }
 
-        # Create task
         try:
             resp = await client.post(
                 f"{CAPSOLVER_BASE}/createTask",
@@ -127,7 +154,6 @@ class CaptchaSolver:
             logger.warning("CAPSolver returned no taskId")
             return None
 
-        # Poll for result (max 120 s)
         return await self._poll_result(client, task_id, timeout=120)
 
     async def _poll_result(
@@ -164,10 +190,226 @@ class CaptchaSolver:
             if status == "failed":
                 logger.warning("CAPSolver task failed: {}", data.get("errorDescription", ""))
                 return None
-            # still processing — loop
 
         logger.warning("CAPSolver timed out after {}s", timeout)
         return None
+
+
+# Keep the old class name as an alias for backwards compatibility
+CaptchaSolver = CapSolverProvider
+
+
+# ---------------------------------------------------------------------------
+# 2Captcha provider
+# ---------------------------------------------------------------------------
+
+class TwoCaptchaProvider(CaptchaProvider):
+    """CAPTCHA solving via the 2Captcha REST API."""
+
+    def __init__(self, api_key: str = ""):
+        self.api_key = api_key
+        self._client: httpx.AsyncClient | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.api_key)
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=60)
+        return self._client
+
+    async def close(self) -> None:
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+
+    async def _submit_and_poll(self, params: dict[str, str]) -> str | None:
+        if not self.enabled:
+            return None
+        client = await self._get_client()
+        params["key"] = self.api_key
+        params["json"] = "1"
+        try:
+            resp = await client.get(f"{TWOCAPTCHA_BASE}/in.php", params=params)
+            data = resp.json()
+        except Exception as exc:
+            logger.warning("2Captcha submit failed: {}", exc)
+            return None
+        if data.get("status") != 1:
+            logger.warning("2Captcha error: {}", data.get("request", "unknown"))
+            return None
+        captcha_id = str(data.get("request", ""))
+        # Poll every 5 s, max 120 s
+        start = time.monotonic()
+        while time.monotonic() - start < 120:
+            await asyncio.sleep(5)
+            try:
+                resp = await client.get(
+                    f"{TWOCAPTCHA_BASE}/res.php",
+                    params={"key": self.api_key, "action": "get", "id": captcha_id, "json": "1"},
+                )
+                data = resp.json()
+            except Exception as exc:
+                logger.warning("2Captcha poll error: {}", exc)
+                continue
+            if data.get("status") == 1:
+                return str(data.get("request", ""))
+            if data.get("request") not in ("CAPTCHA_NOT_READY",):
+                logger.warning("2Captcha error during poll: {}", data.get("request"))
+                return None
+        logger.warning("2Captcha timed out")
+        return None
+
+    async def solve_hcaptcha(self, website_url: str, site_key: str) -> str | None:
+        return await self._submit_and_poll(
+            {"method": "hcaptcha", "sitekey": site_key, "pageurl": website_url}
+        )
+
+    async def solve_recaptcha_v2(self, website_url: str, site_key: str) -> str | None:
+        return await self._submit_and_poll(
+            {"method": "userrecaptcha", "googlekey": site_key, "pageurl": website_url}
+        )
+
+    async def solve_recaptcha_v3(
+        self, website_url: str, site_key: str, page_action: str = ""
+    ) -> str | None:
+        params = {
+            "method": "userrecaptcha",
+            "version": "v3",
+            "googlekey": site_key,
+            "pageurl": website_url,
+            "min_score": "0.7",
+        }
+        if page_action:
+            params["action"] = page_action
+        return await self._submit_and_poll(params)
+
+    async def solve_turnstile(self, website_url: str, site_key: str) -> str | None:
+        return await self._submit_and_poll(
+            {"method": "turnstile", "sitekey": site_key, "pageurl": website_url}
+        )
+
+
+# ---------------------------------------------------------------------------
+# AntiCaptcha provider
+# ---------------------------------------------------------------------------
+
+class AntiCaptchaProvider(CaptchaProvider):
+    """CAPTCHA solving via the AntiCaptcha API."""
+
+    def __init__(self, api_key: str = ""):
+        self.api_key = api_key
+        self._client: httpx.AsyncClient | None = None
+
+    @property
+    def enabled(self) -> bool:
+        return bool(self.api_key)
+
+    async def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(timeout=60)
+        return self._client
+
+    async def close(self) -> None:
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+
+    async def _solve_task(self, task: dict[str, Any]) -> str | None:
+        if not self.enabled:
+            return None
+        client = await self._get_client()
+        try:
+            resp = await client.post(
+                f"{ANTICAPTCHA_BASE}/createTask",
+                json={"clientKey": self.api_key, "task": task},
+            )
+            data = resp.json()
+        except Exception as exc:
+            logger.warning("AntiCaptcha createTask failed: {}", exc)
+            return None
+        if data.get("errorId", 0) != 0:
+            logger.warning("AntiCaptcha error: {}", data.get("errorDescription", "unknown"))
+            return None
+        task_id = data.get("taskId")
+        if not task_id:
+            return None
+        # Poll every 5 s, max 120 s
+        start = time.monotonic()
+        while time.monotonic() - start < 120:
+            await asyncio.sleep(5)
+            try:
+                resp = await client.post(
+                    f"{ANTICAPTCHA_BASE}/getTaskResult",
+                    json={"clientKey": self.api_key, "taskId": task_id},
+                )
+                data = resp.json()
+            except Exception as exc:
+                logger.warning("AntiCaptcha poll error: {}", exc)
+                continue
+            if data.get("status") == "ready":
+                sol = data.get("solution", {})
+                return (
+                    sol.get("gRecaptchaResponse")
+                    or sol.get("token")
+                    or sol.get("captcha_response")
+                )
+            if data.get("status") == "failed" or data.get("errorId", 0) != 0:
+                logger.warning("AntiCaptcha task failed: {}", data.get("errorDescription", ""))
+                return None
+        logger.warning("AntiCaptcha timed out")
+        return None
+
+    async def solve_hcaptcha(self, website_url: str, site_key: str) -> str | None:
+        return await self._solve_task({
+            "type": "HCaptchaTaskProxyless",
+            "websiteURL": website_url,
+            "websiteKey": site_key,
+        })
+
+    async def solve_recaptcha_v2(self, website_url: str, site_key: str) -> str | None:
+        return await self._solve_task({
+            "type": "RecaptchaV2TaskProxyless",
+            "websiteURL": website_url,
+            "websiteKey": site_key,
+        })
+
+    async def solve_recaptcha_v3(
+        self, website_url: str, site_key: str, page_action: str = ""
+    ) -> str | None:
+        task: dict[str, Any] = {
+            "type": "RecaptchaV3TaskProxyless",
+            "websiteURL": website_url,
+            "websiteKey": site_key,
+            "minScore": 0.7,
+        }
+        if page_action:
+            task["pageAction"] = page_action
+        return await self._solve_task(task)
+
+    async def solve_turnstile(self, website_url: str, site_key: str) -> str | None:
+        return await self._solve_task({
+            "type": "AntiTurnstileTaskProxyless",
+            "websiteURL": website_url,
+            "websiteKey": site_key,
+        })
+
+
+# ---------------------------------------------------------------------------
+# Factory
+# ---------------------------------------------------------------------------
+
+def create_captcha_solver(provider: str = "capsolver", api_key: str = "") -> CaptchaProvider:
+    """Create a CAPTCHA solver for the given provider name.
+
+    Supported provider values: "capsolver", "2captcha", "anticaptcha".
+    Falls back to CapSolverProvider for unknown values.
+    """
+    provider = (provider or "capsolver").lower().strip()
+    if provider == "2captcha":
+        return TwoCaptchaProvider(api_key=api_key)
+    if provider == "anticaptcha":
+        return AntiCaptchaProvider(api_key=api_key)
+    return CapSolverProvider(api_key=api_key)
 
 
 # ------------------------------------------------------------------
