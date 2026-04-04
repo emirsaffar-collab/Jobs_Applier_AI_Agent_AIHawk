@@ -10,7 +10,6 @@ from loguru import logger
 
 from src.libs.resume_and_cover_builder.llm.llm_job_parser import LLMParser
 from src.job import Job
-from src.utils.chrome_utils import HTML_to_PDF
 from .config import global_config
 
 class ResumeFacade:
@@ -104,6 +103,7 @@ class ResumeFacade:
         # Generate a unique name using the job URL hash
         suggested_name = hashlib.md5(self.job.link.encode()).hexdigest()[:10]
         
+        from src.utils.chrome_utils import HTML_to_PDF
         result = HTML_to_PDF(html_resume, self.driver)
         self.driver.quit()
         return result, suggested_name
@@ -124,6 +124,7 @@ class ResumeFacade:
             raise ValueError("You must choose a style before generating the PDF.")
         
         html_resume = self.resume_generator.create_resume(style_path)
+        from src.utils.chrome_utils import HTML_to_PDF
         result = HTML_to_PDF(html_resume, self.driver)
         self.driver.quit()
         return result
@@ -148,6 +149,7 @@ class ResumeFacade:
         suggested_name = hashlib.md5(self.job.link.encode()).hexdigest()[:10]
 
         
+        from src.utils.chrome_utils import HTML_to_PDF
         result = HTML_to_PDF(cover_letter_html, self.driver)
         self.driver.quit()
         return result, suggested_name
