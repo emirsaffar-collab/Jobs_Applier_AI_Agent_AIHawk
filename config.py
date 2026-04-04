@@ -4,18 +4,18 @@ import os
 from src.utils.constants import ERROR
 
 #config related to logging must have prefix LOG_
-LOG_LEVEL = os.environ.get('LOG_LEVEL', 'ERROR')
+LOG_LEVEL = os.environ.get('LOG_LEVEL', 'INFO')
 LOG_SELENIUM_LEVEL = ERROR
 LOG_TO_FILE = os.environ.get('LOG_TO_FILE', 'false').lower() == 'true'
-LOG_TO_CONSOLE = os.environ.get('LOG_TO_CONSOLE', 'false').lower() == 'true'
+LOG_TO_CONSOLE = os.environ.get('LOG_TO_CONSOLE', 'true').lower() == 'true'
 
-MINIMUM_WAIT_TIME_IN_SECONDS = 60
+MINIMUM_WAIT_TIME_IN_SECONDS = int(os.environ.get('MINIMUM_WAIT_TIME_IN_SECONDS', '60'))
 
 JOB_APPLICATIONS_DIR = "job_applications"
-JOB_SUITABILITY_SCORE = 7
+JOB_SUITABILITY_SCORE = int(os.environ.get('JOB_SUITABILITY_SCORE', '7'))
 
-JOB_MAX_APPLICATIONS = 5
-JOB_MIN_APPLICATIONS = 1
+JOB_MAX_APPLICATIONS = int(os.environ.get('JOB_MAX_APPLICATIONS', '5'))
+JOB_MIN_APPLICATIONS = int(os.environ.get('JOB_MIN_APPLICATIONS', '1'))
 
 LLM_MODEL_TYPE = os.environ.get('LLM_MODEL_TYPE', 'claude')
 LLM_MODEL = os.environ.get('LLM_MODEL', 'claude-sonnet-4-6')

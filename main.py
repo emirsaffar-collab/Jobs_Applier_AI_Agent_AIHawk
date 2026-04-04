@@ -1,3 +1,4 @@
+import os
 import sys
 
 # Check for web mode early, before importing CLI-specific dependencies
@@ -101,11 +102,17 @@ class ConfigValidator:
             if key not in parameters:
                 if key in ["company_blacklist", "title_blacklist", "location_blacklist"]:
                     parameters[key] = []
+                    logger.warning(
+                        f"'{key}' not found in {config_yaml_path} — defaulting to empty list (no filtering)."
+                    )
                 else:
                     raise ConfigError(f"Missing required key '{key}' in {config_yaml_path}")
             elif not isinstance(parameters[key], expected_type):
                 if key in ["company_blacklist", "title_blacklist", "location_blacklist"] and parameters[key] is None:
                     parameters[key] = []
+                    logger.warning(
+                        f"'{key}' is null in {config_yaml_path} — defaulting to empty list (no filtering)."
+                    )
                 else:
                     raise ConfigError(
                         f"Invalid type for key '{key}' in {config_yaml_path}. Expected {expected_type.__name__}."
@@ -116,6 +123,16 @@ class ConfigValidator:
         cls._validate_list_of_strings(parameters, ["positions", "locations"], config_yaml_path)
         cls._validate_distance(parameters["distance"], config_yaml_path)
         cls._validate_blacklists(parameters, config_yaml_path)
+
+        # Apply optional tuning parameters from YAML to config (env vars take precedence)
+        import config as cfg
+        if "min_suitability_score" in parameters and not os.environ.get("JOB_SUITABILITY_SCORE"):
+            cfg.JOB_SUITABILITY_SCORE = int(parameters["min_suitability_score"])
+        if "max_applications" in parameters and not os.environ.get("JOB_MAX_APPLICATIONS"):
+            cfg.JOB_MAX_APPLICATIONS = int(parameters["max_applications"])
+        if "wait_between_applications" in parameters and not os.environ.get("MINIMUM_WAIT_TIME_IN_SECONDS"):
+            cfg.MINIMUM_WAIT_TIME_IN_SECONDS = int(parameters["wait_between_applications"])
+
         return parameters
 
     @classmethod
@@ -159,7 +176,9 @@ class ConfigValidator:
         """Validate the distance value."""
         if distance not in cls.APPROVED_DISTANCES:
             raise ConfigError(
-                f"Invalid distance value '{distance}' in {config_path}. Must be one of: {cls.APPROVED_DISTANCES}"
+                f"Invalid distance value '{distance}' in {config_path}. "
+                f"Must be one of: {sorted(cls.APPROVED_DISTANCES)} "
+                f"(these match LinkedIn's supported search radius values in miles)."
             )
 
     @classmethod
@@ -215,7 +234,21 @@ class FileManager:
         if not app_data_folder.is_dir():
             raise FileNotFoundError(f"Data folder not found: {app_data_folder}")
 
+        # Auto-create missing files from data_folder_example/ templates
+        example_folder = Path("data_folder_example")
         missing_files = [file for file in FileManager.REQUIRED_FILES if not (app_data_folder / file).exists()]
+        if missing_files and example_folder.is_dir():
+            import shutil
+            still_missing = []
+            for file in missing_files:
+                src = example_folder / file
+                if src.exists():
+                    shutil.copy2(src, app_data_folder / file)
+                    logger.warning(f"Created {app_data_folder / file} from template — please edit with your details.")
+                else:
+                    still_missing.append(file)
+            missing_files = still_missing
+
         if missing_files:
             raise FileNotFoundError(f"Missing files in data folder: {', '.join(missing_files)}")
 

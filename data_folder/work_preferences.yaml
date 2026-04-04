@@ -28,3 +28,11 @@ distance: 0
 company_blacklist: []
 title_blacklist: []
 location_blacklist: []
+
+# --- Optional tuning parameters (can also be set via environment variables) ---
+# Minimum job fit score (1-10) to auto-apply. Lower = more applications, less targeted.
+# min_suitability_score: 7
+# Maximum applications per bot run
+# max_applications: 50
+# Seconds to wait between applications (helps avoid detection)
+# wait_between_applications: 60

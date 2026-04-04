@@ -57,15 +57,23 @@ async function checkEnvConfig() {
     if (!r.ok) return;
     const d = await r.json();
     if (d.llm_api_key_configured) {
-      // API key is set via env var — make fields optional and show hint
+      // API key is set via env var — make fields optional and show badge
       ['llmApiKey', 'botApiKey', 'oApiKey'].forEach(id => {
         const el = document.getElementById(id);
         if (el && !el.value) {
           el.placeholder = 'Configured via LLM_API_KEY env var';
         }
+        // Add source badge next to the field
+        if (el && el.parentNode && !el.parentNode.querySelector('.config-source-badge')) {
+          const badge = document.createElement('span');
+          badge.className = 'config-source-badge';
+          badge.textContent = 'via env var';
+          badge.style.cssText = 'font-size:11px;color:#22c55e;margin-left:8px;opacity:.8;';
+          el.parentNode.appendChild(badge);
+        }
       });
     }
-  } catch {}
+  } catch(e) { console.warn('Config check failed:', e); }
 }
 
 const PAGE_TITLES = {
@@ -111,7 +119,7 @@ async function loadResumeFromServer() {
 async function saveResumeToServer() {
   showStatus('resumeStatus', 'Saving\u2026', 'info');
   try {
-    const r = await fetch('/api/resume', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({resume_yaml: document.getElementById('resumeYaml').value}) });
+    const r = await fetchRetry('/api/resume', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({resume_yaml: document.getElementById('resumeYaml').value}) });
     if (!r.ok) throw new Error(await r.text());
     showStatus('resumeStatus', 'Saved successfully.', 'success');
   } catch(e) { showStatus('resumeStatus', 'Save failed: ' + e.message, 'error'); }
@@ -207,7 +215,7 @@ async function loadPreferencesFromServer() {
     renderAllTags();
     setVal('prefDistance', String(d.distance ?? 25));
     setChk('prefApplyOnce', d.apply_once_at_company ?? true);
-  } catch {}
+  } catch(e) { showToast('Failed to load preferences: ' + e.message, 'warn'); }
 }
 async function savePreferencesToServer() {
   showStatus('prefStatus', 'Saving\u2026', 'info');
@@ -223,10 +231,10 @@ async function savePreferencesToServer() {
       company_blacklist: tags.blCompanies, title_blacklist: tags.blTitles, location_blacklist: tags.blLocations,
       apply_once_at_company: getChk('prefApplyOnce'),
     };
-    const r = await fetch('/api/preferences', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    const r = await fetchRetry('/api/preferences', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     if (!r.ok) throw new Error(await r.text());
     showStatus('prefStatus', 'Preferences saved.', 'success');
-  } catch(e) { showStatus('prefStatus', 'Save failed: ' + e.message, 'error'); }
+  } catch(e) { showStatus('prefStatus', 'Save failed: ' + e.message, 'error'); showToast('Preferences save failed', 'error'); }
 }
 
 async function loadStyles() {
@@ -397,14 +405,14 @@ async function botStart() {
     appendLog('Bot started on ' + activePlatform, 'success');
   } catch(e) { showAlert('botAlert', 'Start failed: ' + e.message, 'danger'); }
 }
-async function botPause()  { try { await fetch('/api/bot/pause',  { method: 'POST' }); setBotPaused();  appendLog('Bot paused.',   'warn');    } catch {} }
-async function botResume() { try { await fetch('/api/bot/resume', { method: 'POST' }); setBotRunning(); appendLog('Bot resumed.',  'success'); } catch {} }
+async function botPause()  { try { await fetch('/api/bot/pause',  { method: 'POST' }); setBotPaused();  appendLog('Bot paused.',   'warn');    } catch(e) { showToast('Pause failed: ' + e.message, 'error'); } }
+async function botResume() { try { await fetch('/api/bot/resume', { method: 'POST' }); setBotRunning(); appendLog('Bot resumed.',  'success'); } catch(e) { showToast('Resume failed: ' + e.message, 'error'); } }
 async function botStop()   {
   try {
     await fetch('/api/bot/stop', { method: 'POST' }); setBotIdle();
     appendLog('Bot stopped.', 'warn');
     if (botWs) { try { botWs.close(); } catch {} botWs = null; }
-  } catch {}
+  } catch(e) { showToast('Stop failed: ' + e.message, 'error'); }
 }
 function connectBotWebSocket() {
   if (botWs) { try { botWs.close(); } catch {} }
@@ -585,6 +593,40 @@ function setTableError(tbodyId, msg, cols) {
   if (el) el.innerHTML = `<tr><td colspan="${cols}" style="text-align:center;color:var(--danger);padding:20px">${esc(msg)}</td></tr>`;
 }
 function esc(str) { return String(str ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* --- Toast notification system --- */
+function showToast(msg, type = 'info', durationMs = 4000) {
+  let container = document.getElementById('toastContainer');
+  if (!container) {
+    container = document.createElement('div');
+    container.id = 'toastContainer';
+    container.style.cssText = 'position:fixed;top:16px;right:16px;z-index:10000;display:flex;flex-direction:column;gap:8px;max-width:380px;';
+    document.body.appendChild(container);
+  }
+  const icons = { success: '\u2713', error: '\u2717', warn: '\u26A0', info: '\u2139' };
+  const colors = { success: '#22c55e', error: '#ef4444', warn: '#f59e0b', info: '#3b82f6' };
+  const toast = document.createElement('div');
+  toast.style.cssText = `display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:8px;background:var(--card-bg,#1e1e2e);border:1px solid ${colors[type] || colors.info};color:var(--text,#e0e0e0);font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.3);opacity:0;transition:opacity .2s;`;
+  toast.innerHTML = `<span style="color:${colors[type] || colors.info};font-size:16px">${icons[type] || icons.info}</span><span>${esc(msg)}</span>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => { toast.style.opacity = '1'; });
+  setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 300); }, durationMs);
+}
+
+/* --- Fetch with retry for critical API calls --- */
+async function fetchRetry(url, opts = {}, retries = 2) {
+  for (let i = 0; i <= retries; i++) {
+    try {
+      const r = await fetch(url, opts);
+      if (r.ok || r.status < 500) return r;
+      if (i < retries) { await new Promise(ok => setTimeout(ok, 1000 * (i + 1))); continue; }
+      return r;
+    } catch(e) {
+      if (i === retries) throw e;
+      await new Promise(ok => setTimeout(ok, 1000 * (i + 1)));
+    }
+  }
+}
 
 function getExampleResume() {
   return `personal_information:

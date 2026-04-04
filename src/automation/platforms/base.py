@@ -76,6 +76,30 @@ class BasePlatform(ABC):
         """Wait a random amount to appear more human."""
         await asyncio.sleep(random.uniform(lo, hi))
 
+    async def _safe_click(self, page: Page, selector: str, *, timeout: int = 5000, retries: int = 2) -> bool:
+        """Click an element with retry on transient failures. Returns True on success."""
+        for attempt in range(retries + 1):
+            try:
+                await page.click(selector, timeout=timeout)
+                return True
+            except Exception:
+                if attempt < retries:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+                    continue
+                return False
+
+    async def _safe_fill(self, page: Page, selector: str, value: str, *, timeout: int = 5000, retries: int = 2) -> bool:
+        """Fill a form field with retry. Returns True on success."""
+        for attempt in range(retries + 1):
+            try:
+                await page.fill(selector, value, timeout=timeout)
+                return True
+            except Exception:
+                if attempt < retries:
+                    await asyncio.sleep(0.5 * (attempt + 1))
+                    continue
+                return False
+
     async def _check_and_solve_captcha(self, page: Page) -> bool:
         """Detect and solve CAPTCHAs on the current page. Returns True if solved."""
         try:
