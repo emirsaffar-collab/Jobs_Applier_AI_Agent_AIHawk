@@ -21,6 +21,7 @@
       <div class="onboarding-step-dot" id="oStep1"></div>
       <div class="onboarding-step-dot" id="oStep2"></div>
       <div class="onboarding-step-dot" id="oStep3"></div>
+      <div class="onboarding-step-dot" id="oStep4"></div>
     </div>
     <!-- Step 0 -->
     <div class="onboarding-panel active" id="oPanel0">
@@ -32,7 +33,7 @@
         <input class="form-input" id="oName" placeholder="e.g. Alex Johnson" />
       </div>
       <div class="onboarding-nav">
-        <span style="color:var(--muted);font-size:12px">Step 1 of 4</span>
+        <span style="color:var(--muted);font-size:12px">Step 1 of 5</span>
         <button class="btn btn-primary" onclick="oNext(0)">Get Started &#8594;</button>
       </div>
     </div>
@@ -92,13 +93,47 @@
         <button class="btn btn-primary" onclick="oNext(2)">Skip for Now &#8594;</button>
       </div>
     </div>
-    <!-- Step 3 -->
+    <!-- Step 3: Job Preferences -->
     <div class="onboarding-panel" id="oPanel3">
-      <div class="onboarding-icon">&#127881;</div>
-      <div class="onboarding-title">You're All Set!</div>
-      <div class="onboarding-desc">Your AI provider and resume are configured. You can fine-tune your <strong>job preferences</strong> (work location, experience level, target positions) anytime from the <strong>Preferences</strong> page in the sidebar.</div>
+      <div class="onboarding-icon">&#127919;</div>
+      <div class="onboarding-title">What Jobs Are You Looking For?</div>
+      <div class="onboarding-desc">Tell us your target positions and locations. You can always refine these later on the Preferences page.</div>
+      <div class="form-group">
+        <label class="form-label">Target Positions</label>
+        <div class="tag-input-row">
+          <input class="form-input" id="oPositionInput" placeholder="e.g. Software Engineer" onkeydown="if(event.key==='Enter'){event.preventDefault();oAddTag('oPositions')}" />
+          <button class="btn btn-ghost btn-sm" onclick="oAddTag('oPositions')">Add</button>
+        </div>
+        <div class="tag-list" id="oPositionTags"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Target Locations</label>
+        <div class="tag-input-row">
+          <input class="form-input" id="oLocationInput" placeholder="e.g. San Francisco, CA" onkeydown="if(event.key==='Enter'){event.preventDefault();oAddTag('oLocations')}" />
+          <button class="btn btn-ghost btn-sm" onclick="oAddTag('oLocations')">Add</button>
+        </div>
+        <div class="tag-list" id="oLocationTags"></div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Work Location</label>
+        <div class="check-group">
+          <label class="check-item"><input type="checkbox" id="oRemote" checked /> Remote</label>
+          <label class="check-item"><input type="checkbox" id="oHybrid" checked /> Hybrid</label>
+          <label class="check-item"><input type="checkbox" id="oOnsite" /> Onsite</label>
+        </div>
+      </div>
       <div class="onboarding-nav">
         <button class="btn btn-ghost" onclick="oBack(3)">&#8592; Back</button>
+        <button class="btn btn-primary" onclick="oNext(3)">Continue &#8594;</button>
+      </div>
+    </div>
+    <!-- Step 4: Finish -->
+    <div class="onboarding-panel" id="oPanel4">
+      <div class="onboarding-icon">&#127881;</div>
+      <div class="onboarding-title">You're All Set!</div>
+      <div class="onboarding-desc">Your AI provider, resume, and job preferences are configured. You can start applying from the <strong>Dashboard</strong> or fine-tune settings anytime from the sidebar.</div>
+      <div class="onboarding-nav">
+        <button class="btn btn-ghost" onclick="oBack(4)">&#8592; Back</button>
         <button class="btn btn-primary" onclick="oFinish()">Finish Setup &#10003;</button>
       </div>
     </div>
@@ -137,6 +172,10 @@
   <button class="nav-item" id="nav-applications" onclick="showPage('applications')">
     <span class="nav-icon">&#128203;</span> Applications
     <span class="nav-badge hidden" id="appsBadge">0</span>
+  </button>
+  <div class="nav-section">Account</div>
+  <button class="nav-item" id="nav-settings" onclick="showPage('settings')">
+    <span class="nav-icon">&#9881;&#65039;</span> Settings
   </button>
   <div class="sidebar-bottom">
     <button class="nav-item" onclick="openOnboarding()" style="font-size:12px">
@@ -185,21 +224,50 @@
           <div class="stat-sub">errors</div>
         </div>
       </div>
+      <!-- Setup Checklist (hidden when complete) -->
+      <div class="card" id="setupChecklist" style="margin-bottom:18px">
+        <div class="card-header">
+          <h2>&#9989; Setup Progress</h2>
+          <span class="badge badge-muted" id="setupPct">Checking...</span>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:8px">
+          <div class="checklist-item" id="chk-llm" onclick="showPage('settings')">
+            <span class="chk-icon" id="chkIcon-llm">&#9675;</span>
+            <span class="chk-label">Configure AI provider</span>
+            <span class="chk-action">Set up &#8594;</span>
+          </div>
+          <div class="checklist-item" id="chk-resume" onclick="showPage('resume')">
+            <span class="chk-icon" id="chkIcon-resume">&#9675;</span>
+            <span class="chk-label">Add your resume</span>
+            <span class="chk-action">Set up &#8594;</span>
+          </div>
+          <div class="checklist-item" id="chk-preferences" onclick="showPage('preferences')">
+            <span class="chk-icon" id="chkIcon-preferences">&#9675;</span>
+            <span class="chk-label">Set job preferences</span>
+            <span class="chk-action">Set up &#8594;</span>
+          </div>
+          <div class="checklist-item" id="chk-credentials" onclick="showPage('settings')">
+            <span class="chk-icon" id="chkIcon-credentials">&#9675;</span>
+            <span class="chk-label">Add platform credentials</span>
+            <span class="chk-action">Set up &#8594;</span>
+          </div>
+        </div>
+      </div>
       <div class="quick-actions">
+        <div class="qa-tile qa-tile-primary" onclick="quickStart()">
+          <div class="qa-icon">&#129302;</div>
+          <div class="qa-title">Start Applying</div>
+          <div class="qa-desc">One click to start the auto-apply bot</div>
+        </div>
         <div class="qa-tile" onclick="showPage('generate')">
           <div class="qa-icon">&#9889;</div>
           <div class="qa-title">Generate Document</div>
-          <div class="qa-desc">Create a tailored resume or cover letter with AI</div>
-        </div>
-        <div class="qa-tile" onclick="showPage('autoapply')">
-          <div class="qa-icon">&#129302;</div>
-          <div class="qa-title">Start Auto Apply</div>
-          <div class="qa-desc">Launch the bot to automatically apply to jobs</div>
+          <div class="qa-desc">Create a tailored resume or cover letter</div>
         </div>
         <div class="qa-tile" onclick="showPage('applications')">
           <div class="qa-icon">&#128203;</div>
           <div class="qa-title">View Applications</div>
-          <div class="qa-desc">Browse your application history and export data</div>
+          <div class="qa-desc">Browse your application history</div>
         </div>
       </div>
       <div class="grid-2" style="gap:18px">
@@ -376,44 +444,48 @@
                 </select>
               </div>
             </div>
-            <div class="settings-section">
-              <h3>&#128683; Blacklists</h3>
-              <div class="form-group">
-                <label class="form-label">Company Blacklist</label>
-                <div class="tag-input-row">
-                  <input class="form-input" id="blCompanyInput" placeholder="Company name" onkeydown="tagKeydown(event,'blCompanies')" />
-                  <button class="btn btn-ghost btn-sm" onclick="addTag('blCompanies')">Add</button>
+            <details class="collapsible-section">
+              <summary>&#128683; Blacklists</summary>
+              <div class="settings-section">
+                <div class="form-group">
+                  <label class="form-label">Company Blacklist</label>
+                  <div class="tag-input-row">
+                    <input class="form-input" id="blCompanyInput" placeholder="Company name" onkeydown="tagKeydown(event,'blCompanies')" />
+                    <button class="btn btn-ghost btn-sm" onclick="addTag('blCompanies')">Add</button>
+                  </div>
+                  <div class="tag-list" id="blCompanyTags"></div>
                 </div>
-                <div class="tag-list" id="blCompanyTags"></div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Title Blacklist</label>
-                <div class="tag-input-row">
-                  <input class="form-input" id="blTitleInput" placeholder="Job title" onkeydown="tagKeydown(event,'blTitles')" />
-                  <button class="btn btn-ghost btn-sm" onclick="addTag('blTitles')">Add</button>
+                <div class="form-group">
+                  <label class="form-label">Title Blacklist</label>
+                  <div class="tag-input-row">
+                    <input class="form-input" id="blTitleInput" placeholder="Job title" onkeydown="tagKeydown(event,'blTitles')" />
+                    <button class="btn btn-ghost btn-sm" onclick="addTag('blTitles')">Add</button>
+                  </div>
+                  <div class="tag-list" id="blTitleTags"></div>
                 </div>
-                <div class="tag-list" id="blTitleTags"></div>
-              </div>
-              <div class="form-group">
-                <label class="form-label">Location Blacklist</label>
-                <div class="tag-input-row">
-                  <input class="form-input" id="blLocationInput" placeholder="Location" onkeydown="tagKeydown(event,'blLocations')" />
-                  <button class="btn btn-ghost btn-sm" onclick="addTag('blLocations')">Add</button>
+                <div class="form-group">
+                  <label class="form-label">Location Blacklist</label>
+                  <div class="tag-input-row">
+                    <input class="form-input" id="blLocationInput" placeholder="Location" onkeydown="tagKeydown(event,'blLocations')" />
+                    <button class="btn btn-ghost btn-sm" onclick="addTag('blLocations')">Add</button>
+                  </div>
+                  <div class="tag-list" id="blLocationTags"></div>
                 </div>
-                <div class="tag-list" id="blLocationTags"></div>
               </div>
-            </div>
-            <div class="settings-section">
-              <h3>&#128296; Advanced</h3>
-              <div class="toggle-wrap">
-                <div>
-                  <div class="toggle-label">Apply Once per Company</div>
-                  <div class="toggle-desc">Skip companies already applied to in this session</div>
+            </details>
+            <details class="collapsible-section">
+              <summary>&#128296; Advanced</summary>
+              <div class="settings-section">
+                <div class="toggle-wrap">
+                  <div>
+                    <div class="toggle-label">Apply Once per Company</div>
+                    <div class="toggle-desc">Skip companies already applied to in this session</div>
+                  </div>
+                  <label class="toggle"><input type="checkbox" id="prefApplyOnce" checked /><span class="toggle-slider"></span></label>
                 </div>
-                <label class="toggle"><input type="checkbox" id="prefApplyOnce" checked /><span class="toggle-slider"></span></label>
               </div>
-              <div id="prefStatus" class="status-msg"></div>
-            </div>
+            </details>
+            <div id="prefStatus" class="status-msg"></div>
           </div>
         </div>
         <div>
@@ -434,36 +506,10 @@
       <div id="genAlert" class="alert"></div>
       <div class="two-col">
         <div>
-          <div class="card" style="margin-bottom:18px">
-            <div class="card-header"><h2>&#128273; AI Configuration</h2></div>
-            <div class="card-body">
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">LLM Provider</label>
-                  <select class="form-select" id="llmProvider" onchange="updateModelList('llmProvider','llmModel')">
-                    <option value="claude">Claude (Anthropic)</option>
-                    <option value="openai">OpenAI (GPT)</option>
-                    <option value="gemini">Google Gemini</option>
-                    <option value="ollama">Ollama (Local)</option>
-                    <option value="huggingface">HuggingFace</option>
-                    <option value="perplexity">Perplexity</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Model</label>
-                  <select class="form-select" id="llmModel"></select>
-                </div>
-              </div>
-              <div class="form-group ollama-url-group" id="llmApiUrlGroup" style="display:none">
-                <label class="form-label">Ollama API URL</label>
-                <input class="form-input" id="llmApiUrl" placeholder="http://localhost:11434" oninput="LS.set('api_url', this.value)" />
-              </div>
-              <div class="form-group">
-                <label class="form-label">API Key</label>
-                <input class="form-input" id="llmApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey(this.value)" />
-                <div class="credential-note">Stored locally in your browser.</div>
-              </div>
-            </div>
+          <div class="ai-config-badge" id="genAiBadge">
+            <span class="ai-badge-icon">&#128273;</span>
+            <span class="ai-badge-text" id="genAiBadgeText">AI: Loading...</span>
+            <button class="btn btn-ghost btn-sm" onclick="showPage('settings')">Change</button>
           </div>
           <div class="card" style="margin-bottom:18px">
             <div class="card-header"><h2>&#128196; Document Type</h2></div>
@@ -562,80 +608,37 @@
       <div class="two-col">
         <div>
           <div class="card" style="margin-bottom:18px">
-            <div class="card-header"><h2>&#127760; Platform</h2></div>
+            <div class="card-header"><h2>&#127760; Platform &amp; Credentials</h2></div>
             <div class="card-body">
               <div class="platform-tab-row">
-                <button class="platform-tab active" onclick="selectPlatform('linkedin', this)">LinkedIn</button>
-                <button class="platform-tab" onclick="selectPlatform('indeed', this)">Indeed</button>
-                <button class="platform-tab" onclick="selectPlatform('glassdoor', this)">Glassdoor</button>
-                <button class="platform-tab" onclick="selectPlatform('ziprecruiter', this)">ZipRecruiter</button>
-                <button class="platform-tab" onclick="selectPlatform('dice', this)">Dice</button>
+                <button class="platform-tab active" onclick="selectPlatform('linkedin', this)">
+                  <span class="cred-dot" id="credDot-linkedin"></span> LinkedIn
+                </button>
+                <button class="platform-tab" onclick="selectPlatform('indeed', this)">
+                  <span class="cred-dot" id="credDot-indeed"></span> Indeed
+                </button>
+                <button class="platform-tab" onclick="selectPlatform('glassdoor', this)">
+                  <span class="cred-dot" id="credDot-glassdoor"></span> Glassdoor
+                </button>
+                <button class="platform-tab" onclick="selectPlatform('ziprecruiter', this)">
+                  <span class="cred-dot" id="credDot-ziprecruiter"></span> ZipRecruiter
+                </button>
+                <button class="platform-tab" onclick="selectPlatform('dice', this)">
+                  <span class="cred-dot" id="credDot-dice"></span> Dice
+                </button>
               </div>
-              <div class="platform-creds active" id="creds-linkedin">
-                <div class="form-row">
-                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="li-email" placeholder="you@example.com" /></div>
-                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="li-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
-                </div>
-              </div>
-              <div class="platform-creds" id="creds-indeed">
-                <div class="form-row">
-                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="ind-email" placeholder="you@example.com" /></div>
-                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="ind-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
-                </div>
-              </div>
-              <div class="platform-creds" id="creds-glassdoor">
-                <div class="form-row">
-                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="gd-email" placeholder="you@example.com" /></div>
-                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="gd-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
-                </div>
-              </div>
-              <div class="platform-creds" id="creds-ziprecruiter">
-                <div class="form-row">
-                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="zr-email" placeholder="you@example.com" /></div>
-                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="zr-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
-                </div>
-              </div>
-              <div class="platform-creds" id="creds-dice">
-                <div class="form-row">
-                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="di-email" placeholder="you@example.com" /></div>
-                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="di-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
-                </div>
-              </div>
-              <div style="display:flex;justify-content:flex-end;margin-top:10px;gap:8px">
-                <button class="btn btn-ghost btn-sm" onclick="loadCredentials()">&#8595; Load</button>
-                <button class="btn btn-ghost btn-sm" onclick="saveCredentials()">&#8593; Save</button>
-              </div>
+              <div id="botCredStatus" style="font-size:12px;color:var(--muted);margin-bottom:8px"></div>
+              <button class="btn btn-ghost btn-sm" onclick="showPage('settings')" style="margin-bottom:4px">Manage credentials in Settings &#8594;</button>
             </div>
+          </div>
+          <div class="ai-config-badge" id="botAiBadge" style="margin-bottom:18px">
+            <span class="ai-badge-icon">&#128273;</span>
+            <span class="ai-badge-text" id="botAiBadgeText">AI: Loading...</span>
+            <button class="btn btn-ghost btn-sm" onclick="showPage('settings')">Change</button>
           </div>
           <div class="card">
             <div class="card-header"><h2>&#9881;&#65039; Bot Settings</h2></div>
             <div class="card-body">
-              <div class="form-row">
-                <div class="form-group">
-                  <label class="form-label">LLM Provider</label>
-                  <select class="form-select" id="botProvider" onchange="updateModelList('botProvider','botModel');updateProviderHelp('botProvider','botProviderHelp','botApiKeyGroup')">
-                    <option value="claude">Claude</option>
-                    <option value="openai">OpenAI</option>
-                    <option value="gemini">Gemini</option>
-                    <option value="ollama">Ollama</option>
-                    <option value="huggingface">HuggingFace</option>
-                    <option value="perplexity">Perplexity</option>
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">Model</label>
-                  <select class="form-select" id="botModel"></select>
-                </div>
-              </div>
-              <div class="form-group ollama-url-group" id="botApiUrlGroup" style="display:none">
-                <label class="form-label">Ollama API URL</label>
-                <input class="form-input" id="botApiUrl" placeholder="http://localhost:11434" oninput="LS.set('api_url', this.value)" />
-              </div>
-              <div class="form-group" id="botApiKeyGroup">
-                <label class="form-label">API Key</label>
-                <input class="form-input" id="botApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey(this.value)" />
-              </div>
-              <div id="botProviderHelp" class="provider-help" style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:var(--surface);font-size:12px;line-height:1.6"></div>
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Min AI Score</label>
@@ -650,14 +653,16 @@
                 <div><div class="toggle-label">Headless Browser</div><div class="toggle-desc">Run browser in background</div></div>
                 <label class="toggle"><input type="checkbox" id="botHeadless" checked /><span class="toggle-slider"></span></label>
               </div>
-              <div class="alert alert-info show" style="font-size:11px;margin-top:8px;padding:10px 12px">
-                <strong>2FA / Security Check Tips:</strong>
-                <ul style="margin:4px 0 0 16px;padding:0">
-                  <li>If LinkedIn requires 2FA, <strong>uncheck</strong> headless mode so you can see the browser and complete the verification.</li>
-                  <li>After completing 2FA once, cookies are saved automatically. You can re-enable headless mode for future runs.</li>
-                  <li>If you get repeated 2FA prompts, log into LinkedIn manually in your browser first to mark your device as trusted.</li>
-                </ul>
-              </div>
+              <details class="collapsible-section">
+                <summary>2FA / Security Check Tips</summary>
+                <div class="alert alert-info show" style="font-size:11px;margin-top:8px;padding:10px 12px">
+                  <ul style="margin:4px 0 0 16px;padding:0">
+                    <li>If LinkedIn requires 2FA, <strong>uncheck</strong> headless mode so you can see the browser and complete the verification.</li>
+                    <li>After completing 2FA once, cookies are saved automatically. You can re-enable headless mode for future runs.</li>
+                    <li>If you get repeated 2FA prompts, log into LinkedIn manually in your browser first to mark your device as trusted.</li>
+                  </ul>
+                </div>
+              </details>
               <div class="toggle-wrap">
                 <div><div class="toggle-label">Tailored Resumes</div><div class="toggle-desc">Generate a custom resume per job</div></div>
                 <label class="toggle"><input type="checkbox" id="botTailored" /><span class="toggle-slider"></span></label>
@@ -736,6 +741,101 @@
                 <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:32px">Loading&#8230;</td></tr>
               </tbody>
             </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PAGE: SETTINGS -->
+    <div class="page" id="page-settings">
+      <div class="two-col">
+        <div>
+          <div class="card" style="margin-bottom:18px">
+            <div class="card-header"><h2>&#128273; AI Provider</h2></div>
+            <div class="card-body">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">LLM Provider</label>
+                  <select class="form-select" id="settingsProvider" onchange="updateModelList('settingsProvider','settingsModel');updateProviderHelp('settingsProvider','settingsProviderHelp','settingsApiKeyGroup');syncSettingsToAll()">
+                    <option value="claude">Claude (Anthropic)</option>
+                    <option value="openai">OpenAI (GPT)</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="ollama">Ollama (Local)</option>
+                    <option value="huggingface">HuggingFace</option>
+                    <option value="perplexity">Perplexity</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Model</label>
+                  <select class="form-select" id="settingsModel" onchange="syncSettingsToAll()"></select>
+                </div>
+              </div>
+              <div class="form-group ollama-url-group" id="settingsApiUrlGroup" style="display:none">
+                <label class="form-label">Ollama API URL</label>
+                <input class="form-input" id="settingsApiUrl" placeholder="http://localhost:11434" oninput="LS.set('api_url', this.value);syncSettingsToAll()" />
+              </div>
+              <div class="form-group" id="settingsApiKeyGroup">
+                <label class="form-label">API Key</label>
+                <input class="form-input" id="settingsApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey(this.value);syncSettingsToAll()" />
+                <div class="credential-note">Stored locally in your browser &mdash; never sent to our servers.</div>
+              </div>
+              <div id="settingsProviderHelp" class="provider-help" style="margin-top:8px;padding:10px 12px;border-radius:8px;background:var(--surface2);font-size:12px;line-height:1.6"></div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-header"><h2>&#127912; Appearance</h2></div>
+            <div class="card-body">
+              <div class="toggle-wrap">
+                <div><div class="toggle-label">Dark Mode</div><div class="toggle-desc">Switch between dark and light theme</div></div>
+                <label class="toggle"><input type="checkbox" id="settingsThemeToggle" onchange="toggleTheme()" checked /><span class="toggle-slider"></span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <div class="card-header"><h2>&#128274; Platform Credentials</h2></div>
+            <div class="card-body">
+              <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Credentials for job platforms. Saved to <code style="color:var(--accent)">credentials.yaml</code>.</p>
+              <div class="platform-tab-row" id="settingsPlatformTabs">
+                <button class="platform-tab active" onclick="selectSettingsPlatform('linkedin', this)">LinkedIn</button>
+                <button class="platform-tab" onclick="selectSettingsPlatform('indeed', this)">Indeed</button>
+                <button class="platform-tab" onclick="selectSettingsPlatform('glassdoor', this)">Glassdoor</button>
+                <button class="platform-tab" onclick="selectSettingsPlatform('ziprecruiter', this)">ZipRecruiter</button>
+                <button class="platform-tab" onclick="selectSettingsPlatform('dice', this)">Dice</button>
+              </div>
+              <div class="platform-creds active" id="settings-creds-linkedin">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-li-email" placeholder="you@example.com" /></div>
+                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="s-li-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
+                </div>
+              </div>
+              <div class="platform-creds" id="settings-creds-indeed">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-ind-email" placeholder="you@example.com" /></div>
+                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="s-ind-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
+                </div>
+              </div>
+              <div class="platform-creds" id="settings-creds-glassdoor">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-gd-email" placeholder="you@example.com" /></div>
+                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="s-gd-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
+                </div>
+              </div>
+              <div class="platform-creds" id="settings-creds-ziprecruiter">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-zr-email" placeholder="you@example.com" /></div>
+                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="s-zr-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
+                </div>
+              </div>
+              <div class="platform-creds" id="settings-creds-dice">
+                <div class="form-row">
+                  <div class="form-group"><label class="form-label">Email</label><input class="form-input" id="s-di-email" placeholder="you@example.com" /></div>
+                  <div class="form-group"><label class="form-label">Password</label><input class="form-input" id="s-di-password" type="password" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" /></div>
+                </div>
+              </div>
+              <div id="settingsCredStatus" class="status-msg"></div>
+            </div>
           </div>
         </div>
       </div>

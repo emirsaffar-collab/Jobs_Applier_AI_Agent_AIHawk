@@ -9,28 +9,41 @@ let currentAction = 'resume';
 let currentJobId  = null;
 let genWs         = null;
 let botWs         = null;
-let activePlatform = 'linkedin';
+let activePlatform = LS.get('last_platform', 'linkedin') || 'linkedin';
 let envApiKeyConfigured = false;  // true when LLM_API_KEY env var is set on the server
 let genPollInterval = null;
+let cachedResumeYaml = null;  // cached resume for auto-load on Generate page
+let settingsPlatform = 'linkedin';
 
 const tags = { positions: [], locations: [], blCompanies: [], blTitles: [], blLocations: [] };
 let genHistory = LS.get('gen_history', []);
 
+// Onboarding tag state
+const oTags = { oPositions: [], oLocations: [] };
+
+function debounce(fn, ms) {
+  let timer;
+  return function(...args) { clearTimeout(timer); timer = setTimeout(() => fn.apply(this, args), ms); };
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   applyTheme(LS.get('theme', 'dark'));
   loadSavedApiKey();
+  initSettingsPage();
   checkHealth();
   checkEnvConfig();
   loadStyles();
   loadPreferencesFromServer();
-  loadCredentials();
+  loadSettingsCredentials();
   loadApplications();
   refreshBotStatus();
   renderGenHistory();
+  loadSetupStatus();
   if (!LS.get('onboarding_complete', false)) openOnboarding();
   setInterval(refreshBotStatus, 10000);
   setInterval(loadDashboardStats, 30000);
   loadDashboardStats();
+  initAutoSave();
 });
 
 function applyTheme(theme) {
@@ -38,25 +51,31 @@ function applyTheme(theme) {
   document.getElementById('themeToggle').textContent = theme === 'dark' ? '\u{1F319}' : '\u2600\uFE0F';
 }
 function toggleTheme() {
-  const t = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  const settingsEl = document.getElementById('settingsThemeToggle');
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  // If triggered from Settings toggle, read its value; otherwise just flip
+  const t = settingsEl && document.activeElement === settingsEl ? (settingsEl.checked ? 'dark' : 'light') : (isDark ? 'light' : 'dark');
   LS.set('theme', t); applyTheme(t);
+  if (settingsEl) settingsEl.checked = (t === 'dark');
 }
 
 function saveApiKey(val) {
-  const k = val || document.getElementById('llmApiKey').value || document.getElementById('botApiKey').value;
+  const k = val || document.getElementById('settingsApiKey')?.value || '';
   if (k) {
     LS.set('api_key', k);
-    ['llmApiKey', 'botApiKey'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = k; });
+    ['settingsApiKey', 'oApiKey'].forEach(id => { const el = document.getElementById(id); if (el && !el.value) el.value = k; });
   }
+  renderAiConfigBadges();
 }
 function loadSavedApiKey() {
   const k = LS.get('api_key', ''); const p = LS.get('api_provider', 'claude'); const m = LS.get('api_model', '');
   const u = LS.get('api_url', '');
-  if (k) { setVal('llmApiKey', k); setVal('botApiKey', k); setVal('oApiKey', k); }
-  if (u) { setVal('llmApiUrl', u); setVal('botApiUrl', u); setVal('oApiUrl', u); }
-  setVal('llmProvider', p); setVal('botProvider', p); setVal('oProvider', p);
+  if (k) { setVal('settingsApiKey', k); setVal('oApiKey', k); }
+  if (u) { setVal('settingsApiUrl', u); setVal('oApiUrl', u); }
+  setVal('settingsProvider', p); setVal('oProvider', p);
   updateAllModelLists();
-  if (m) { setVal('llmModel', m); setVal('botModel', m); setVal('oModel', m); }
+  if (m) { setVal('settingsModel', m); setVal('oModel', m); }
+  renderAiConfigBadges();
 }
 
 async function checkEnvConfig() {
@@ -66,13 +85,11 @@ async function checkEnvConfig() {
     const d = await r.json();
     envApiKeyConfigured = !!d.llm_api_key_configured;
     if (d.llm_api_key_configured) {
-      // API key is set via env var — make fields optional and show badge
-      ['llmApiKey', 'botApiKey', 'oApiKey'].forEach(id => {
+      ['settingsApiKey', 'oApiKey'].forEach(id => {
         const el = document.getElementById(id);
         if (el && !el.value) {
           el.placeholder = 'Configured via LLM_API_KEY env var';
         }
-        // Add source badge next to the field
         if (el && el.parentNode && !el.parentNode.querySelector('.config-source-badge')) {
           const badge = document.createElement('span');
           badge.className = 'config-source-badge';
@@ -82,6 +99,7 @@ async function checkEnvConfig() {
         }
       });
     }
+    renderAiConfigBadges();
   } catch(e) { console.warn('Config check failed:', e); }
 }
 
@@ -92,17 +110,22 @@ const PAGE_TITLES = {
   generate:     ['Generate',     'AI-powered document generation'],
   autoapply:    ['Auto Apply',   'Automated job application bot'],
   applications: ['Applications', 'History of submitted applications'],
+  settings:     ['Settings',     'AI provider, credentials & theme'],
 };
 function showPage(page) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-  document.getElementById('nav-' + page).classList.add('active');
+  const nav = document.getElementById('nav-' + page);
+  if (nav) nav.classList.add('active');
   currentPage = page;
   const [t, s] = PAGE_TITLES[page] || [page, ''];
   setEl('topbarTitle', t); setEl('topbarSub', s);
   if (page === 'applications') loadApplications();
-  if (page === 'dashboard')    loadDashboardStats();
+  if (page === 'dashboard')    { loadDashboardStats(); loadSetupStatus(); }
+  if (page === 'generate')     autoLoadResumeForGenerate();
+  if (page === 'autoapply')    { renderCredentialStatus(); renderAiConfigBadges(); }
+  if (page === 'settings')     { renderAiConfigBadges(); updateSettingsThemeToggle(); }
   document.getElementById('sidebar').classList.remove('open');
   const backdrop = document.getElementById('sidebarBackdrop');
   if (backdrop) { backdrop.classList.add('hidden'); backdrop.classList.remove('show'); }
@@ -286,8 +309,8 @@ const DEFAULT_MODELS = {
   ollama: 'llama3', huggingface: 'meta-llama/Llama-3-70b-chat-hf', perplexity: 'sonar-pro',
 };
 function updateModelList(providerSelectId, modelSelectId) {
-  providerSelectId = providerSelectId || 'llmProvider';
-  modelSelectId = modelSelectId || 'llmModel';
+  providerSelectId = providerSelectId || 'settingsProvider';
+  modelSelectId = modelSelectId || 'settingsModel';
   const providerEl = document.getElementById(providerSelectId);
   const sel = document.getElementById(modelSelectId);
   if (!providerEl || !sel) return;
@@ -330,7 +353,7 @@ function updateProviderHelp(providerSelectId, helpDivId, apiKeyGroupId) {
     if (kg) kg.style.display = isOllama ? 'none' : 'block';
   }
   // Update placeholder
-  const keyInputId = providerSelectId === 'oProvider' ? 'oApiKey' : 'botApiKey';
+  const keyInputId = providerSelectId === 'oProvider' ? 'oApiKey' : 'settingsApiKey';
   const keyInput = document.getElementById(keyInputId);
   if (keyInput && info.prefix) keyInput.placeholder = info.prefix;
   // Render help
@@ -339,13 +362,13 @@ function updateProviderHelp(providerSelectId, helpDivId, apiKeyGroupId) {
   helpDiv.innerHTML = `<strong>${info.name}</strong> ${link}<ol style="margin:4px 0 0 16px;padding:0">${steps}</ol>`;
 }
 function updateAllModelLists() {
-  const p = (document.getElementById('llmProvider') || document.getElementById('oProvider') || {}).value || 'claude';
-  ['oProvider','llmProvider','botProvider'].forEach(pid => { const el = document.getElementById(pid); if (el) el.value = p; });
+  const p = (document.getElementById('settingsProvider') || document.getElementById('oProvider') || {}).value || 'claude';
+  ['oProvider','settingsProvider'].forEach(pid => { const el = document.getElementById(pid); if (el) el.value = p; });
   updateModelList('oProvider', 'oModel');
-  updateModelList('llmProvider', 'llmModel');
-  updateModelList('botProvider', 'botModel');
+  updateModelList('settingsProvider', 'settingsModel');
   updateProviderHelp('oProvider', 'oProviderHelp', 'oApiKeyGroup');
-  updateProviderHelp('botProvider', 'botProviderHelp', 'botApiKeyGroup');
+  updateProviderHelp('settingsProvider', 'settingsProviderHelp', 'settingsApiKeyGroup');
+  renderAiConfigBadges();
 }
 function selectAction(action) {
   currentAction = action;
@@ -355,9 +378,11 @@ function selectAction(action) {
 }
 async function startGeneration() {
   if (genPollInterval) { clearInterval(genPollInterval); genPollInterval = null; }
-  const apiKey = document.getElementById('llmApiKey').value.trim();
-  const provider = document.getElementById('llmProvider').value;
-  if (!apiKey && !envApiKeyConfigured && provider !== 'ollama') { showStatus('genStatus', 'API key is required.', 'error'); return; }
+  const apiKey = LS.get('api_key', '');
+  const provider = LS.get('api_provider', 'claude');
+  const model = LS.get('api_model', '') || DEFAULT_MODELS[provider] || 'claude-sonnet-4-6';
+  const apiUrl = LS.get('api_url', '');
+  if (!apiKey && !envApiKeyConfigured && provider !== 'ollama') { showStatus('genStatus', 'API key is required. Configure it in Settings.', 'error'); return; }
   const yaml = document.getElementById('genResumeYaml').value.trim();
   if (!yaml)   { showStatus('genStatus', 'Resume YAML is required.', 'error'); return; }
   const btn = document.getElementById('generateBtn');
@@ -370,8 +395,8 @@ async function startGeneration() {
       action: currentAction, resume_yaml: yaml,
       job_url: document.getElementById('jobUrl').value.trim() || null,
       style:   document.getElementById('resumeStyle').value || null,
-      llm_api_key: apiKey, llm_model_type: provider, llm_model: document.getElementById('llmModel').value,
-      llm_api_url: document.getElementById('llmApiUrl').value.trim() || '',
+      llm_api_key: apiKey, llm_model_type: provider, llm_model: model,
+      llm_api_url: apiUrl,
     })});
     if (!r.ok) throw new Error(await r.text());
     const d = await r.json(); currentJobId = d.job_id;
@@ -433,46 +458,50 @@ function renderGenHistory() {
 
 function selectPlatform(p, btn) {
   activePlatform = p;
-  document.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.platform-creds').forEach(c => c.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  const el = document.getElementById('creds-' + p); if (el) el.classList.add('active');
+  // Update Auto Apply platform tabs
+  if (btn) {
+    btn.closest('.platform-tab-row')?.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+  }
 }
-async function loadCredentials() {
+async function loadSettingsCredentials() {
   try {
     const r = await fetch('/api/credentials'); if (!r.ok) return; const d = await r.json();
     const pl = { linkedin: 'li', indeed: 'ind', glassdoor: 'gd', ziprecruiter: 'zr', dice: 'di' };
     Object.entries(pl).forEach(([plat, pfx]) => {
       const c = d[plat] || {};
-      setVal(`${pfx}-email`, c.email || ''); setVal(`${pfx}-password`, c.password || '');
+      setVal(`s-${pfx}-email`, c.email || ''); setVal(`s-${pfx}-password`, c.password || '');
     });
-    appendLog('Credentials loaded.', 'info');
-  } catch(e) { appendLog('Failed to load credentials: ' + e.message, 'error'); }
+  } catch(e) { console.warn('Failed to load credentials:', e); }
 }
-async function saveCredentials() {
-  const btn = document.querySelector('[onclick="saveCredentials()"]');
-  if (btn) btn.disabled = true;
+const _autoSaveCredentials = debounce(async function() {
   try {
     const pl = { linkedin: 'li', indeed: 'ind', glassdoor: 'gd', ziprecruiter: 'zr', dice: 'di' };
     const payload = {};
     Object.entries(pl).forEach(([plat, pfx]) => {
-      payload[plat] = { email: document.getElementById(`${pfx}-email`)?.value || '', password: document.getElementById(`${pfx}-password`)?.value || '' };
+      payload[plat] = { email: document.getElementById(`s-${pfx}-email`)?.value || '', password: document.getElementById(`s-${pfx}-password`)?.value || '' };
     });
     const r = await fetch('/api/credentials', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
     if (!r.ok) throw new Error(await r.text());
-    appendLog('Credentials saved.', 'success');
-  } catch(e) { appendLog('Failed to save credentials: ' + e.message, 'error'); }
-  finally { if (btn) btn.disabled = false; }
-}
+    showStatus('settingsCredStatus', 'Auto-saved.', 'success');
+    renderCredentialStatus();
+  } catch(e) { showStatus('settingsCredStatus', 'Save failed: ' + e.message, 'error'); }
+}, 1500);
+// Keep backward compat aliases
+function loadCredentials() { loadSettingsCredentials(); }
+function saveCredentials() { _autoSaveCredentials(); }
 async function botStart() {
-  const apiKey = document.getElementById('botApiKey').value.trim();
-  const botProvider = document.getElementById('botProvider').value;
-  if (!apiKey && !envApiKeyConfigured && botProvider !== 'ollama') { showAlert('botAlert', 'API key is required.', 'danger'); return; }
+  const apiKey = LS.get('api_key', '');
+  const provider = LS.get('api_provider', 'claude');
+  const model = LS.get('api_model', '') || DEFAULT_MODELS[provider] || 'claude-sonnet-4-6';
+  const apiUrl = LS.get('api_url', '');
+  if (!apiKey && !envApiKeyConfigured && provider !== 'ollama') { showAlert('botAlert', 'API key is required. Configure it in Settings.', 'danger'); return; }
+  LS.set('last_platform', activePlatform);
   try {
     const r = await fetch('/api/bot/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({
-      platforms: [activePlatform], llm_model_type: botProvider,
-      llm_model: document.getElementById('botModel').value, llm_api_key: apiKey,
-      llm_api_url: document.getElementById('botApiUrl').value.trim() || '',
+      platforms: [activePlatform], llm_model_type: provider,
+      llm_model: model, llm_api_key: apiKey,
+      llm_api_url: apiUrl,
       min_score: parseInt(document.getElementById('botMinScore').value || '60', 10),
       max_applications: parseInt(document.getElementById('botMaxApps').value || '50', 10),
       headless: document.getElementById('botHeadless').checked,
@@ -633,23 +662,80 @@ function oNext(step) {
     const k = document.getElementById('oApiKey').value.trim(); const p = document.getElementById('oProvider').value; const m = document.getElementById('oModel').value;
     const u = document.getElementById('oApiUrl').value.trim();
     if (k || p === 'ollama') {
-      if (k) { LS.set('api_key', k); setVal('llmApiKey', k); setVal('botApiKey', k); }
+      if (k) { LS.set('api_key', k); setVal('settingsApiKey', k); }
       LS.set('api_provider', p); LS.set('api_model', m);
-      if (u) { LS.set('api_url', u); setVal('llmApiUrl', u); setVal('botApiUrl', u); }
-      setVal('llmProvider', p); setVal('botProvider', p);
-      updateModelList('llmProvider', 'llmModel'); updateModelList('botProvider', 'botModel');
-      setVal('llmModel', m); setVal('botModel', m);
+      if (u) { LS.set('api_url', u); setVal('settingsApiUrl', u); }
+      setVal('settingsProvider', p);
+      updateModelList('settingsProvider', 'settingsModel');
+      setVal('settingsModel', m);
     }
   }
-  oStep = Math.min(oStep + 1, 3); renderOStep();
+  if (step === 2) {
+    // Pre-fill preferences from inferred if available
+    const inferred = LS.get('inferred_preferences', null);
+    if (inferred) {
+      if (inferred.positions && inferred.positions.length && !oTags.oPositions.length) {
+        oTags.oPositions = inferred.positions;
+        oRenderTags('oPositions');
+      }
+      if (inferred.locations && inferred.locations.length && !oTags.oLocations.length) {
+        oTags.oLocations = inferred.locations;
+        oRenderTags('oLocations');
+      }
+    }
+  }
+  if (step === 3) {
+    // Save preferences from onboarding
+    oSavePreferences();
+  }
+  oStep = Math.min(oStep + 1, 4); renderOStep();
 }
 function oBack(step) { oStep = Math.max(oStep - 1, 0); renderOStep(); }
 function oFinish() {
   LS.set('onboarding_complete', true);
   const name = document.getElementById('oName').value.trim(); if (name) LS.set('user_name', name);
   document.getElementById('onboardingOverlay').classList.add('hidden');
+  renderAiConfigBadges();
+  loadSetupStatus();
 }
 function oSkipToResume() { LS.set('onboarding_complete', true); document.getElementById('onboardingOverlay').classList.add('hidden'); showPage('resume'); }
+
+// Onboarding tag helpers
+const O_TAG_CONFIG = {
+  oPositions: { input: 'oPositionInput', list: 'oPositionTags' },
+  oLocations: { input: 'oLocationInput', list: 'oLocationTags' },
+};
+function oAddTag(group) {
+  const cfg = O_TAG_CONFIG[group]; const input = document.getElementById(cfg.input);
+  const val = input.value.trim(); if (val && !oTags[group].includes(val)) { oTags[group].push(val); oRenderTags(group); } input.value = '';
+}
+function oRemoveTag(group, idx) { oTags[group].splice(idx, 1); oRenderTags(group); }
+function oRenderTags(group) {
+  const el = document.getElementById(O_TAG_CONFIG[group].list);
+  if (el) el.innerHTML = oTags[group].map((t,i) => `<span class="tag">${esc(t)}<button class="tag-remove" onclick="oRemoveTag('${group}',${i})">\u00D7</button></span>`).join('');
+}
+async function oSavePreferences() {
+  try {
+    const positions = oTags.oPositions.length ? oTags.oPositions : ['Software engineer'];
+    const locations = oTags.oLocations.length ? oTags.oLocations : ['United States'];
+    const payload = {
+      remote: document.getElementById('oRemote')?.checked ?? true,
+      hybrid: document.getElementById('oHybrid')?.checked ?? true,
+      onsite: document.getElementById('oOnsite')?.checked ?? false,
+      experience_level: { internship: false, entry: true, associate: true, mid_senior_level: true, director: false, executive: false },
+      job_types: { full_time: true, contract: false, part_time: false, temporary: false, internship: false, other: false, volunteer: false },
+      date_filters: { all_time: false, month: false, week: false, twenty_four_hours: true },
+      positions: positions, locations: locations,
+      distance: 100, company_blacklist: [], title_blacklist: [], location_blacklist: [],
+      apply_once_at_company: true,
+    };
+    await fetch('/api/preferences', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+    // Also update the main preferences tags
+    tags.positions = positions; tags.locations = locations;
+    renderAllTags();
+    LS.remove('inferred_preferences');
+  } catch(e) { console.warn('Failed to save onboarding preferences:', e); }
+}
 
 function showStatus(id, msg, type) {
   const el = document.getElementById(id); if (!el) return;
@@ -707,6 +793,220 @@ async function fetchRetry(url, opts = {}, retries = 2) {
     }
   }
 }
+
+/* === Settings Page === */
+function initSettingsPage() {
+  updateModelList('settingsProvider', 'settingsModel');
+  updateProviderHelp('settingsProvider', 'settingsProviderHelp', 'settingsApiKeyGroup');
+  // Attach auto-save listeners to credential fields in settings
+  ['s-li','s-ind','s-gd','s-zr','s-di'].forEach(pfx => {
+    ['email','password'].forEach(fld => {
+      const el = document.getElementById(`${pfx}-${fld}`);
+      if (el) el.addEventListener('blur', _autoSaveCredentials);
+    });
+  });
+}
+function syncSettingsToAll() {
+  const p = document.getElementById('settingsProvider')?.value || 'claude';
+  const m = document.getElementById('settingsModel')?.value || '';
+  const u = document.getElementById('settingsApiUrl')?.value || '';
+  LS.set('api_provider', p);
+  if (m) LS.set('api_model', m);
+  if (u) LS.set('api_url', u);
+  setVal('oProvider', p);
+  updateModelList('oProvider', 'oModel');
+  if (m) setVal('oModel', m);
+  toggleOllamaFields(p);
+  renderAiConfigBadges();
+}
+function selectSettingsPlatform(p, btn) {
+  settingsPlatform = p;
+  const container = document.getElementById('settingsPlatformTabs');
+  if (container) container.querySelectorAll('.platform-tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('[id^="settings-creds-"]').forEach(c => c.classList.remove('active'));
+  const el = document.getElementById('settings-creds-' + p); if (el) el.classList.add('active');
+}
+function updateSettingsThemeToggle() {
+  const el = document.getElementById('settingsThemeToggle');
+  if (el) el.checked = document.documentElement.getAttribute('data-theme') === 'dark';
+}
+
+/* === AI Config Badge (shown on Generate + Auto Apply pages) === */
+function renderAiConfigBadges() {
+  const provider = LS.get('api_provider', 'claude');
+  const model = LS.get('api_model', '') || DEFAULT_MODELS[provider] || '';
+  const hasKey = !!LS.get('api_key', '') || envApiKeyConfigured;
+  const label = provider.charAt(0).toUpperCase() + provider.slice(1);
+  const statusIcon = hasKey ? '\u2705' : '\u26A0\uFE0F';
+  const text = `${statusIcon} ${label} / ${model}`;
+  setEl('genAiBadgeText', text);
+  setEl('botAiBadgeText', text);
+}
+
+/* === Auto-Load Resume on Generate Page === */
+async function autoLoadResumeForGenerate() {
+  const el = document.getElementById('genResumeYaml');
+  if (!el || el.value.trim()) return; // don't overwrite user edits
+  if (cachedResumeYaml) { el.value = cachedResumeYaml; return; }
+  try {
+    const r = await fetch('/api/resume'); if (!r.ok) return;
+    const d = await r.json();
+    cachedResumeYaml = d.resume_yaml || '';
+    if (cachedResumeYaml && !el.value.trim()) el.value = cachedResumeYaml;
+  } catch {}
+}
+
+/* === Setup Status & Checklist === */
+async function loadSetupStatus() {
+  try {
+    const r = await fetch('/api/setup-status'); if (!r.ok) return;
+    const d = await r.json();
+    // Also check client-side API key
+    const hasApiKey = !!LS.get('api_key', '') || d.llm_configured;
+    renderSetupChecklist({
+      llm: hasApiKey,
+      resume: d.resume_configured,
+      preferences: d.preferences_configured,
+      credentials: Object.values(d.credentials || {}).some(v => v),
+    });
+    // Also render credential dots for auto apply page
+    if (d.credentials) _credentialStatus = d.credentials;
+    renderCredentialStatus();
+  } catch {}
+}
+let _credentialStatus = {};
+function renderSetupChecklist(status) {
+  const items = [
+    { key: 'llm', done: status.llm },
+    { key: 'resume', done: status.resume },
+    { key: 'preferences', done: status.preferences },
+    { key: 'credentials', done: status.credentials },
+  ];
+  let doneCount = items.filter(i => i.done).length;
+  items.forEach(item => {
+    const icon = document.getElementById('chkIcon-' + item.key);
+    const row = document.getElementById('chk-' + item.key);
+    if (icon) icon.textContent = item.done ? '\u2705' : '\u26AA';
+    if (row) {
+      row.classList.toggle('checklist-done', item.done);
+      row.classList.toggle('checklist-pending', !item.done);
+    }
+  });
+  const pct = Math.round((doneCount / items.length) * 100);
+  const badge = document.getElementById('setupPct');
+  if (badge) {
+    badge.textContent = pct + '%';
+    badge.className = 'badge ' + (pct === 100 ? 'badge-success' : 'badge-warning');
+  }
+  const checklist = document.getElementById('setupChecklist');
+  if (checklist) checklist.style.display = pct === 100 ? 'none' : 'block';
+}
+
+/* === Credential Status Dots (Auto Apply page) === */
+function renderCredentialStatus() {
+  const platforms = ['linkedin', 'indeed', 'glassdoor', 'ziprecruiter', 'dice'];
+  platforms.forEach(p => {
+    const dot = document.getElementById('credDot-' + p);
+    if (dot) {
+      const ok = _credentialStatus[p];
+      dot.className = 'cred-dot' + (ok ? ' cred-ok' : '');
+      dot.title = ok ? 'Credentials saved' : 'Not configured';
+    }
+  });
+  const statusEl = document.getElementById('botCredStatus');
+  if (statusEl) {
+    const configured = platforms.filter(p => _credentialStatus[p]);
+    if (configured.length === 0) {
+      statusEl.innerHTML = 'No credentials configured. <a href="#" onclick="showPage(\'settings\');return false" style="color:var(--accent)">Add in Settings</a>';
+    } else {
+      statusEl.textContent = configured.map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(', ') + ' ready';
+    }
+  }
+}
+
+/* === Quick Start (Dashboard one-click) === */
+async function quickStart() {
+  // Check readiness
+  try {
+    const r = await fetch('/api/setup-status'); if (!r.ok) throw new Error('Failed to check status');
+    const d = await r.json();
+    const hasApiKey = !!LS.get('api_key', '') || d.llm_configured;
+    const missing = [];
+    if (!hasApiKey) missing.push('AI provider (Settings)');
+    if (!d.resume_configured) missing.push('Resume');
+    if (!d.preferences_configured) missing.push('Job preferences');
+    const hasAnyCred = Object.values(d.credentials || {}).some(v => v);
+    if (!hasAnyCred) missing.push('Platform credentials (Settings)');
+    if (missing.length > 0) {
+      showToast('Setup incomplete: ' + missing.join(', '), 'warn', 5000);
+      return;
+    }
+    // Find first platform with credentials
+    const platform = LS.get('last_platform', '') || Object.entries(d.credentials).find(([,v]) => v)?.[0] || 'linkedin';
+    activePlatform = platform;
+    // Navigate to Auto Apply and start
+    showPage('autoapply');
+    // Select the platform tab
+    document.querySelectorAll('.platform-tab').forEach(t => {
+      const isPlatform = t.textContent.trim().toLowerCase().replace(/\s/g,'') === platform;
+      t.classList.toggle('active', isPlatform);
+    });
+    await botStart();
+  } catch(e) { showToast('Quick start failed: ' + e.message, 'error'); }
+}
+
+/* === Auto-Save === */
+function initAutoSave() {
+  // Preferences auto-save on any change
+  const prefAutoSave = debounce(() => {
+    savePreferencesToServer();
+    showToast('Preferences auto-saved', 'success', 2000);
+  }, 1500);
+  // Attach to all preference controls
+  const prefIds = [
+    'prefRemote','prefHybrid','prefOnsite',
+    'expInternship','expEntry','expAssociate','expMid','expDirector','expExecutive',
+    'jtFullTime','jtContract','jtPartTime','jtTemporary','jtInternship','jtOther','jtVolunteer',
+    'prefApplyOnce','prefDistance',
+  ];
+  prefIds.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('change', prefAutoSave);
+  });
+  document.querySelectorAll('input[name="dateFilter"]').forEach(el => el.addEventListener('change', prefAutoSave));
+
+  // Resume auto-save on typing
+  const resumeAutoSave = debounce(async () => {
+    const val = document.getElementById('resumeYaml')?.value;
+    if (val && val.trim()) {
+      try {
+        const r = await fetchRetry('/api/resume', { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify({resume_yaml: val}) });
+        if (r.ok) {
+          showStatus('resumeStatus', 'Auto-saved.', 'success');
+          cachedResumeYaml = val; // update cache
+        }
+      } catch {}
+    }
+  }, 2000);
+  const resumeEl = document.getElementById('resumeYaml');
+  if (resumeEl) resumeEl.addEventListener('input', resumeAutoSave);
+}
+
+// Patch addTag/removeTag to trigger preference auto-save
+const _origAddTag = addTag;
+addTag = function(group) {
+  _origAddTag(group);
+  // Trigger auto-save
+  const prefAutoSave = debounce(() => savePreferencesToServer(), 1500);
+  prefAutoSave();
+};
+const _origRemoveTag = removeTag;
+removeTag = function(group, idx) {
+  _origRemoveTag(group, idx);
+  const prefAutoSave = debounce(() => savePreferencesToServer(), 1500);
+  prefAutoSave();
+};
 
 function getExampleResume() {
   return `personal_information:

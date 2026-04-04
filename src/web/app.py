@@ -728,6 +728,59 @@ async def get_config():
     }
 
 
+@app.get("/api/setup-status")
+async def setup_status():
+    """Return setup completeness for the dashboard checklist.
+
+    The frontend also checks localStorage for the API key, so llm_configured
+    here only reflects the server-side env var.
+    """
+    import config as cfg
+
+    # Resume configured?
+    resume_ok = False
+    if PLAIN_TEXT_RESUME_PATH.exists():
+        try:
+            data = yaml.safe_load(PLAIN_TEXT_RESUME_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict) and data.get("personal_information"):
+                pi = data["personal_information"]
+                resume_ok = bool(pi.get("name") or pi.get("surname"))
+        except Exception:
+            pass
+
+    # Preferences configured?
+    prefs_ok = False
+    if WORK_PREFERENCES_PATH.exists():
+        try:
+            data = yaml.safe_load(WORK_PREFERENCES_PATH.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                positions = data.get("positions", [])
+                locations = data.get("locations", [])
+                # Consider configured if user has set real values (not just defaults)
+                prefs_ok = bool(positions and locations)
+        except Exception:
+            pass
+
+    # Credentials per platform
+    creds = _load_credentials()
+    cred_status = {}
+    for plat in ("linkedin", "indeed", "glassdoor", "ziprecruiter", "dice"):
+        pc = creds.get(plat, {})
+        cred_status[plat] = bool(
+            isinstance(pc, dict) and pc.get("email") and pc.get("password")
+        )
+    # Also check env-var credentials for LinkedIn
+    if not cred_status["linkedin"] and cfg.LINKEDIN_EMAIL and cfg.LINKEDIN_PASSWORD:
+        cred_status["linkedin"] = True
+
+    return {
+        "resume_configured": resume_ok,
+        "preferences_configured": prefs_ok,
+        "credentials": cred_status,
+        "llm_configured": bool(cfg.LLM_API_KEY),
+    }
+
+
 @app.get("/api/llm-providers")
 async def get_llm_providers():
     """Return LLM provider metadata (names, dashboard URLs, setup instructions)."""
