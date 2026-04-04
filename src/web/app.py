@@ -52,6 +52,10 @@ app.add_middleware(_OptionalAuthMiddleware)
 _jobs: dict = {}
 _MAX_JOBS = 100
 
+# Serialize generation requests so concurrent jobs don't clobber the global
+# LLM config (cfg.LLM_MODEL_TYPE / cfg.LLM_MODEL) that the resume builder reads.
+_generation_lock = asyncio.Lock()
+
 
 def _cleanup_jobs() -> None:
     """Evict oldest completed/failed jobs when the store exceeds _MAX_JOBS."""
@@ -68,6 +72,58 @@ def _cleanup_jobs() -> None:
 
 # Credentials file path
 CREDENTIALS_PATH = Path("data_folder/credentials.yaml")
+
+# ---------------------------------------------------------------------------
+# Persistent generation history (SQLite)
+# ---------------------------------------------------------------------------
+_GEN_DB_PATH = Path("data_folder/applications.db")
+
+
+def _init_gen_table() -> None:
+    """Create the generation_history table if it doesn't exist."""
+    import sqlite3
+    _GEN_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(_GEN_DB_PATH), timeout=10)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS generation_history (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id     TEXT NOT NULL,
+            action     TEXT NOT NULL,
+            status     TEXT NOT NULL,
+            style      TEXT,
+            job_url    TEXT,
+            created_at TEXT NOT NULL,
+            error      TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+
+def _persist_generation(job_id: str, action: str, status: str,
+                        style: str = "", job_url: str = "", error: str = "") -> None:
+    """Save a completed/failed generation to the persistent DB."""
+    import sqlite3
+    from datetime import datetime, timezone
+    try:
+        conn = sqlite3.connect(str(_GEN_DB_PATH), timeout=10)
+        conn.execute(
+            """INSERT INTO generation_history (job_id, action, status, style, job_url, created_at, error)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (job_id, action, status, style, job_url,
+             datetime.now(timezone.utc).isoformat(), error),
+        )
+        conn.commit()
+        conn.close()
+    except Exception as exc:
+        logger.warning(f"Failed to persist generation history: {exc}")
+
+
+# Initialize table on import
+try:
+    _init_gen_table()
+except Exception:
+    pass
 
 
 class GenerateRequest(BaseModel):
@@ -311,140 +367,159 @@ def _get_available_styles() -> dict:
     return styles
 
 
-def _validate_resume_yaml(yaml_str: str) -> bool:
-    """Validate that the YAML string is a valid resume."""
+def _validate_resume_yaml(yaml_str: str) -> str | None:
+    """Validate that the YAML string is a valid resume.
+
+    Returns None on success, or a human-readable error string.
+    """
     try:
         data = yaml.safe_load(yaml_str)
-        if not isinstance(data, dict):
-            return False
-        if "personal_information" not in data:
-            return False
-        return True
-    except yaml.YAMLError:
-        return False
+    except yaml.YAMLError as exc:
+        return f"Invalid YAML syntax: {exc}"
+
+    if not isinstance(data, dict):
+        return "Resume YAML must be a mapping (key: value), not a list or scalar."
+
+    if "personal_information" not in data:
+        return "Missing required section 'personal_information'."
+
+    pi = data["personal_information"]
+    if not isinstance(pi, dict):
+        return "'personal_information' must be a mapping with name, email, etc."
+    if not pi.get("name") and not pi.get("surname"):
+        return "Resume must include at least a name under 'personal_information'."
+
+    return None
 
 
 async def _run_generation(job_id: str, request: GenerateRequest):
     """Run document generation in a background thread with progress updates."""
     import config as cfg
 
-    # Save/restore global config to avoid concurrent request interference
-    orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
-    try:
-        cfg.LLM_MODEL_TYPE = request.llm_model_type
-        cfg.LLM_MODEL = request.llm_model
+    # Acquire lock so concurrent generation requests don't overwrite each
+    # other's global LLM config (the resume builder reads cfg.LLM_MODEL_TYPE).
+    async with _generation_lock:
+        orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
+        try:
+            cfg.LLM_MODEL_TYPE = request.llm_model_type
+            cfg.LLM_MODEL = request.llm_model
 
-        _jobs[job_id]["status"] = "running"
-        await manager.send_progress(job_id, {
-            "status": "running", "progress": 5, "message": "Initializing..."
-        })
-
-        # Validate resume YAML
-        if not _validate_resume_yaml(request.resume_yaml):
-            raise ValueError("Invalid resume YAML. Must contain at least 'personal_information' section.")
-
-        await manager.send_progress(job_id, {
-            "status": "running", "progress": 10, "message": "Loading resume data..."
-        })
-
-        # Import here to avoid circular imports
-        from src.libs.resume_and_cover_builder import ResumeFacade, ResumeGenerator, StyleManager
-        from src.resume_schemas.resume import Resume
-
-        # Parse resume
-        resume_object = Resume(request.resume_yaml)
-
-        await manager.send_progress(job_id, {
-            "status": "running", "progress": 15, "message": "Setting up style..."
-        })
-
-        # Setup style
-        style_manager = StyleManager()
-        available_styles = style_manager.get_styles()
-        if request.style and request.style in available_styles:
-            style_manager.set_selected_style(request.style)
-        elif available_styles:
-            # Default to first available style
-            first_style = next(iter(available_styles))
-            style_manager.set_selected_style(first_style)
-        else:
-            raise ValueError("No resume styles available.")
-
-        await manager.send_progress(job_id, {
-            "status": "running", "progress": 20, "message": "Initializing resume generator..."
-        })
-
-        # Setup generator
-        resume_generator = ResumeGenerator()
-        resume_generator.set_resume_object(resume_object)
-
-        output_path = Path("data_folder/output")
-        output_path.mkdir(parents=True, exist_ok=True)
-
-        resume_facade = ResumeFacade(
-            api_key=request.llm_api_key,
-            style_manager=style_manager,
-            resume_generator=resume_generator,
-            resume_object=resume_object,
-            output_path=output_path,
-        )
-
-        if request.action in ("resume_tailored", "cover_letter"):
-            if not request.job_url:
-                raise ValueError("Job URL is required for tailored documents.")
-
+            _jobs[job_id]["status"] = "running"
             await manager.send_progress(job_id, {
-                "status": "running", "progress": 25, "message": "Fetching job description..."
+                "status": "running", "progress": 5, "message": "Initializing..."
             })
 
-            # Fetch job description using httpx instead of Selenium
-            result_base64 = await asyncio.to_thread(
-                _generate_with_job_url, resume_facade, request
-            )
-        else:
+            # Validate resume YAML
+            resume_error = _validate_resume_yaml(request.resume_yaml)
+            if resume_error:
+                raise ValueError(f"Invalid resume YAML: {resume_error}")
+
             await manager.send_progress(job_id, {
-                "status": "running", "progress": 30, "message": "Generating resume with AI..."
+                "status": "running", "progress": 10, "message": "Loading resume data..."
             })
-            result_base64 = await asyncio.to_thread(
-                _generate_base_resume, resume_facade
+
+            # Import here to avoid circular imports
+            from src.libs.resume_and_cover_builder import ResumeFacade, ResumeGenerator, StyleManager
+            from src.resume_schemas.resume import Resume
+
+            # Parse resume
+            resume_object = Resume(request.resume_yaml)
+
+            await manager.send_progress(job_id, {
+                "status": "running", "progress": 15, "message": "Setting up style..."
+            })
+
+            # Setup style
+            style_manager = StyleManager()
+            available_styles = style_manager.get_styles()
+            if request.style and request.style in available_styles:
+                style_manager.set_selected_style(request.style)
+            elif available_styles:
+                # Default to first available style
+                first_style = next(iter(available_styles))
+                style_manager.set_selected_style(first_style)
+            else:
+                raise ValueError("No resume styles available.")
+
+            await manager.send_progress(job_id, {
+                "status": "running", "progress": 20, "message": "Initializing resume generator..."
+            })
+
+            # Setup generator
+            resume_generator = ResumeGenerator()
+            resume_generator.set_resume_object(resume_object)
+
+            output_path = Path("data_folder/output")
+            output_path.mkdir(parents=True, exist_ok=True)
+
+            resume_facade = ResumeFacade(
+                api_key=request.llm_api_key,
+                style_manager=style_manager,
+                resume_generator=resume_generator,
+                resume_object=resume_object,
+                output_path=output_path,
             )
 
-        await manager.send_progress(job_id, {
-            "status": "running", "progress": 90, "message": "Finalizing PDF..."
-        })
+            if request.action in ("resume_tailored", "cover_letter"):
+                if not request.job_url:
+                    raise ValueError("Job URL is required for tailored documents.")
 
-        # Store result
-        if isinstance(result_base64, tuple):
-            pdf_data = base64.b64decode(result_base64[0])
-        else:
-            pdf_data = base64.b64decode(result_base64)
+                await manager.send_progress(job_id, {
+                    "status": "running", "progress": 25, "message": "Fetching job description..."
+                })
 
-        _jobs[job_id]["pdf_data"] = pdf_data
-        _jobs[job_id]["status"] = "completed"
-        _jobs[job_id]["progress"] = 100
+                # Fetch job description using httpx instead of Selenium
+                result_base64 = await asyncio.to_thread(
+                    _generate_with_job_url, resume_facade, request
+                )
+            else:
+                await manager.send_progress(job_id, {
+                    "status": "running", "progress": 30, "message": "Generating resume with AI..."
+                })
+                result_base64 = await asyncio.to_thread(
+                    _generate_base_resume, resume_facade
+                )
 
-        filename = _get_filename(request.action, request.job_url)
-        _jobs[job_id]["filename"] = filename
+            await manager.send_progress(job_id, {
+                "status": "running", "progress": 90, "message": "Finalizing PDF..."
+            })
 
-        await manager.send_progress(job_id, {
-            "status": "completed",
-            "progress": 100,
-            "message": "Document generated successfully!",
-            "download_url": f"/api/download/{job_id}",
-        })
+            # Store result
+            if isinstance(result_base64, tuple):
+                pdf_data = base64.b64decode(result_base64[0])
+            else:
+                pdf_data = base64.b64decode(result_base64)
 
-    except Exception as e:
-        logger.error(f"Generation failed for job {job_id}: {e}")
-        _jobs[job_id]["status"] = "failed"
-        _jobs[job_id]["error"] = str(e)
-        await manager.send_progress(job_id, {
-            "status": "failed", "progress": 0, "message": f"Error: {e}",
-            "error": str(e),
-        })
-    finally:
-        # Restore global config
-        cfg.LLM_MODEL_TYPE = orig_type
-        cfg.LLM_MODEL = orig_model
+            _jobs[job_id]["pdf_data"] = pdf_data
+            _jobs[job_id]["status"] = "completed"
+            _jobs[job_id]["progress"] = 100
+
+            filename = _get_filename(request.action, request.job_url)
+            _jobs[job_id]["filename"] = filename
+
+            await manager.send_progress(job_id, {
+                "status": "completed",
+                "progress": 100,
+                "message": "Document generated successfully!",
+                "download_url": f"/api/download/{job_id}",
+            })
+            _persist_generation(job_id, request.action, "completed",
+                                style=request.style or "", job_url=request.job_url or "")
+
+        except Exception as e:
+            logger.error(f"Generation failed for job {job_id}: {e}")
+            _jobs[job_id]["status"] = "failed"
+            _jobs[job_id]["error"] = str(e)
+            await manager.send_progress(job_id, {
+                "status": "failed", "progress": 0, "message": f"Error: {e}",
+                "error": str(e),
+            })
+            _persist_generation(job_id, request.action, "failed",
+                                style=request.style or "", job_url=request.job_url or "",
+                                error=str(e))
+        finally:
+            cfg.LLM_MODEL_TYPE = orig_type
+            cfg.LLM_MODEL = orig_model
 
 
 def _generate_with_job_url(resume_facade: "ResumeFacade", request: GenerateRequest):
@@ -649,6 +724,23 @@ async def get_config():
     }
 
 
+@app.get("/api/generation-history")
+async def get_generation_history(limit: int = 50):
+    """Return recent document generation history from the persistent DB."""
+    import sqlite3
+    try:
+        conn = sqlite3.connect(str(_GEN_DB_PATH), timeout=10)
+        conn.row_factory = sqlite3.Row
+        rows = conn.execute(
+            "SELECT * FROM generation_history ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        conn.close()
+        return {"history": [dict(r) for r in rows]}
+    except Exception as exc:
+        return {"history": [], "error": str(exc)}
+
+
 @app.get("/api/styles")
 async def get_styles():
     """Get available resume styles."""
@@ -803,11 +895,9 @@ async def update_resume(body: ResumeUpdate):
     if not body.resume_yaml.strip():
         raise HTTPException(status_code=400, detail="Resume YAML content cannot be empty.")
 
-    if not _validate_resume_yaml(body.resume_yaml):
-        raise HTTPException(
-            status_code=422,
-            detail="Invalid resume YAML. Must be valid YAML with a 'personal_information' section.",
-        )
+    resume_error = _validate_resume_yaml(body.resume_yaml)
+    if resume_error:
+        raise HTTPException(status_code=422, detail=f"Invalid resume YAML: {resume_error}")
 
     DATA_FOLDER.mkdir(parents=True, exist_ok=True)
     try:
@@ -1006,16 +1096,17 @@ async def upload_pdf_resume(
             detail="LLM API key is required. Configure it in Step 1 or set the LLM_API_KEY environment variable.",
         )
 
-    # Apply model settings (save/restore for concurrency safety)
-    orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
-    cfg.LLM_MODEL_TYPE = llm_model_type
-    cfg.LLM_MODEL = llm_model
+    # Acquire lock so concurrent requests don't overwrite each other's model config
+    async with _generation_lock:
+        orig_type, orig_model = cfg.LLM_MODEL_TYPE, cfg.LLM_MODEL
+        cfg.LLM_MODEL_TYPE = llm_model_type
+        cfg.LLM_MODEL = llm_model
 
-    try:
-        return await _upload_pdf_inner(file, api_key)
-    finally:
-        cfg.LLM_MODEL_TYPE = orig_type
-        cfg.LLM_MODEL = orig_model
+        try:
+            return await _upload_pdf_inner(file, api_key)
+        finally:
+            cfg.LLM_MODEL_TYPE = orig_type
+            cfg.LLM_MODEL = orig_model
 
 
 async def _upload_pdf_inner(file: UploadFile, api_key: str):

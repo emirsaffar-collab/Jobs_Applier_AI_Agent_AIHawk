@@ -46,6 +46,15 @@ title_blacklist:
 location_blacklist:
   - Brazil
 
+# --- Optional Tuning Parameters ---
+# These can also be set via environment variables (env vars take precedence).
+# Minimum job fit score (1-10) to auto-apply. Lower = more applications, less targeted.
+min_suitability_score: 7
+# Maximum applications per bot run
+max_applications: 50
+# Seconds to wait between applications (helps avoid detection)
+wait_between_applications: 60
+
 # --- Recruiter Outreach ---
 # Send personalised messages to recruiters/hiring managers after applying (LinkedIn only).
 recruiter_outreach:
