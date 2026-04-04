@@ -43,7 +43,7 @@
       <div class="onboarding-desc">AIHawk uses large language models to tailor your resume and generate cover letters. Your API key is stored only in your browser.</div>
       <div class="form-group">
         <label class="form-label">LLM Provider</label>
-        <select class="form-select" id="oProvider" onchange="updateModelList('oProvider','oModel')">
+        <select class="form-select" id="oProvider" onchange="updateModelList('oProvider','oModel');updateProviderHelp('oProvider','oProviderHelp','oApiKeyGroup')">
           <option value="claude">Anthropic (Claude)</option>
           <option value="openai">OpenAI (GPT)</option>
           <option value="gemini">Google (Gemini)</option>
@@ -60,11 +60,12 @@
         <label class="form-label">Ollama API URL</label>
         <input class="form-input" id="oApiUrl" placeholder="http://localhost:11434" />
       </div>
-      <div class="form-group">
+      <div class="form-group" id="oApiKeyGroup">
         <label class="form-label">API Key</label>
         <input class="form-input" id="oApiKey" type="password" placeholder="sk-&#8230;" />
         <div class="credential-note">Stored in localStorage &#8212; never sent to our servers.</div>
       </div>
+      <div id="oProviderHelp" class="provider-help" style="margin-top:8px;padding:10px 12px;border-radius:8px;background:var(--surface);font-size:12px;line-height:1.6"></div>
       <div class="onboarding-nav">
         <button class="btn btn-ghost" onclick="oBack(1)">&#8592; Back</button>
         <button class="btn btn-primary" onclick="oNext(1)">Continue &#8594;</button>
@@ -612,7 +613,7 @@
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">LLM Provider</label>
-                  <select class="form-select" id="botProvider" onchange="updateModelList('botProvider','botModel')">
+                  <select class="form-select" id="botProvider" onchange="updateModelList('botProvider','botModel');updateProviderHelp('botProvider','botProviderHelp','botApiKeyGroup')">
                     <option value="claude">Claude</option>
                     <option value="openai">OpenAI</option>
                     <option value="gemini">Gemini</option>
@@ -630,10 +631,11 @@
                 <label class="form-label">Ollama API URL</label>
                 <input class="form-input" id="botApiUrl" placeholder="http://localhost:11434" oninput="LS.set('api_url', this.value)" />
               </div>
-              <div class="form-group">
+              <div class="form-group" id="botApiKeyGroup">
                 <label class="form-label">API Key</label>
                 <input class="form-input" id="botApiKey" type="password" placeholder="sk-ant-&#8230;" oninput="saveApiKey(this.value)" />
               </div>
+              <div id="botProviderHelp" class="provider-help" style="margin-bottom:12px;padding:10px 12px;border-radius:8px;background:var(--surface);font-size:12px;line-height:1.6"></div>
               <div class="form-row">
                 <div class="form-group">
                   <label class="form-label">Min AI Score</label>
@@ -647,6 +649,14 @@
               <div class="toggle-wrap">
                 <div><div class="toggle-label">Headless Browser</div><div class="toggle-desc">Run browser in background</div></div>
                 <label class="toggle"><input type="checkbox" id="botHeadless" checked /><span class="toggle-slider"></span></label>
+              </div>
+              <div class="alert alert-info show" style="font-size:11px;margin-top:8px;padding:10px 12px">
+                <strong>2FA / Security Check Tips:</strong>
+                <ul style="margin:4px 0 0 16px;padding:0">
+                  <li>If LinkedIn requires 2FA, <strong>uncheck</strong> headless mode so you can see the browser and complete the verification.</li>
+                  <li>After completing 2FA once, cookies are saved automatically. You can re-enable headless mode for future runs.</li>
+                  <li>If you get repeated 2FA prompts, log into LinkedIn manually in your browser first to mark your device as trusted.</li>
+                </ul>
               </div>
               <div class="toggle-wrap">
                 <div><div class="toggle-label">Tailored Resumes</div><div class="toggle-desc">Generate a custom resume per job</div></div>

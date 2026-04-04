@@ -306,12 +306,46 @@ function updateModelList(providerSelectId, modelSelectId) {
 function toggleOllamaFields(provider) {
   document.querySelectorAll('.ollama-url-group').forEach(el => el.style.display = provider === 'ollama' ? 'block' : 'none');
 }
+
+// --- Provider help (API key guidance) ---
+const PROVIDER_HELP = {
+  claude:      { name: 'Anthropic (Claude)', url: 'https://console.anthropic.com/settings/keys', prefix: 'sk-ant-\u2026', steps: ['Go to console.anthropic.com and create an account', 'Navigate to Settings \u2192 API Keys', 'Click "Create Key" and copy it'] },
+  openai:      { name: 'OpenAI (GPT)',       url: 'https://platform.openai.com/api-keys',        prefix: 'sk-\u2026',     steps: ['Go to platform.openai.com and create an account', 'Navigate to API Keys in the sidebar', 'Click "Create new secret key"'] },
+  gemini:      { name: 'Google (Gemini)',     url: 'https://aistudio.google.com/apikey',          prefix: 'AI\u2026',      steps: ['Go to aistudio.google.com and sign in', 'Click "Get API key" in the sidebar', 'Create a key in a Google Cloud project'] },
+  huggingface: { name: 'Hugging Face',        url: 'https://huggingface.co/settings/tokens',      prefix: 'hf_\u2026',     steps: ['Go to huggingface.co and create an account', 'Navigate to Settings \u2192 Access Tokens', 'Click "New token" with Read scope'] },
+  perplexity:  { name: 'Perplexity',          url: 'https://www.perplexity.ai/settings/api',      prefix: 'pplx-\u2026',   steps: ['Go to perplexity.ai and create an account', 'Navigate to Settings \u2192 API', 'Generate a new API key'] },
+  ollama:      { name: 'Ollama (Local)',       url: 'https://ollama.ai/download',                  prefix: '',              steps: ['Download and install Ollama from ollama.ai', 'Run "ollama pull llama3" to get a model', 'No API key needed \u2014 runs locally'] },
+};
+function updateProviderHelp(providerSelectId, helpDivId, apiKeyGroupId) {
+  const providerEl = document.getElementById(providerSelectId);
+  const helpDiv = document.getElementById(helpDivId);
+  if (!providerEl || !helpDiv) return;
+  const p = providerEl.value;
+  const info = PROVIDER_HELP[p];
+  if (!info) { helpDiv.innerHTML = ''; return; }
+  const isOllama = p === 'ollama';
+  // Hide/show API key field for Ollama
+  if (apiKeyGroupId) {
+    const kg = document.getElementById(apiKeyGroupId);
+    if (kg) kg.style.display = isOllama ? 'none' : 'block';
+  }
+  // Update placeholder
+  const keyInputId = providerSelectId === 'oProvider' ? 'oApiKey' : 'botApiKey';
+  const keyInput = document.getElementById(keyInputId);
+  if (keyInput && info.prefix) keyInput.placeholder = info.prefix;
+  // Render help
+  const link = info.url ? `<a href="${info.url}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">${isOllama ? 'Download Ollama' : 'Get API Key'} \u2197</a>` : '';
+  const steps = info.steps.map(s => `<li>${s}</li>`).join('');
+  helpDiv.innerHTML = `<strong>${info.name}</strong> ${link}<ol style="margin:4px 0 0 16px;padding:0">${steps}</ol>`;
+}
 function updateAllModelLists() {
   const p = (document.getElementById('llmProvider') || document.getElementById('oProvider') || {}).value || 'claude';
   ['oProvider','llmProvider','botProvider'].forEach(pid => { const el = document.getElementById(pid); if (el) el.value = p; });
   updateModelList('oProvider', 'oModel');
   updateModelList('llmProvider', 'llmModel');
   updateModelList('botProvider', 'botModel');
+  updateProviderHelp('oProvider', 'oProviderHelp', 'oApiKeyGroup');
+  updateProviderHelp('botProvider', 'botProviderHelp', 'botApiKeyGroup');
 }
 function selectAction(action) {
   currentAction = action;

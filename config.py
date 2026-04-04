@@ -45,6 +45,9 @@ RECRUITER_OUTREACH_STYLE = os.environ.get('RECRUITER_OUTREACH_STYLE', 'professio
 RATE_LIMIT_DEFAULT = int(os.environ.get('RATE_LIMIT_DEFAULT', '80'))
 RATE_LIMIT_COOLDOWN_MINUTES = float(os.environ.get('RATE_LIMIT_COOLDOWN_MINUTES', '5'))
 
+# Two-factor authentication timeout (seconds) — how long to wait for manual 2FA completion
+TWO_FA_TIMEOUT_SECONDS = int(os.environ.get('TWO_FA_TIMEOUT_SECONDS', '300'))
+
 # Web server configuration
 WEB_HOST = os.environ.get('WEB_HOST', '0.0.0.0')
 WEB_PORT = int(os.environ.get('PORT', os.environ.get('WEB_PORT', '8080')))

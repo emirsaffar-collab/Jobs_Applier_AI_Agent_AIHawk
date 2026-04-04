@@ -728,6 +728,13 @@ async def get_config():
     }
 
 
+@app.get("/api/llm-providers")
+async def get_llm_providers():
+    """Return LLM provider metadata (names, dashboard URLs, setup instructions)."""
+    from src.utils.llm_providers import LLM_PROVIDER_INFO
+    return LLM_PROVIDER_INFO
+
+
 @app.get("/api/generation-history")
 async def get_generation_history(limit: int = 50):
     """Return recent document generation history from the persistent DB."""

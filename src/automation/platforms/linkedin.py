@@ -14,8 +14,12 @@ from typing import Any
 
 from playwright.async_api import Page, TimeoutError as PWTimeout
 
+import config as cfg
 from src.automation.platforms.base import BasePlatform, JobListing, ApplyResult
 from src.logging import logger
+
+_2FA_POLL_INTERVAL = 10  # seconds between countdown log messages
+_2FA_MAX_RETRIES = 2     # total attempts before giving up
 
 # LinkedIn selectors (as of 2025 — may need updates if LinkedIn changes DOM)
 _SEL = {
@@ -71,7 +75,12 @@ class LinkedInPlatform(BasePlatform):
     LOGIN_URL = "https://www.linkedin.com/login"
     JOBS_BASE = "https://www.linkedin.com/jobs/search/"
 
+    def __init__(self, llm=None):
+        super().__init__(llm=llm)
+        self.last_login_failure_reason: str = ""
+
     async def login(self, page: Page, credentials: dict, browser_manager=None) -> bool:
+        self.last_login_failure_reason = ""
         email = credentials.get("email", "")
         password = credentials.get("password", "")
         if not email or not password:
@@ -101,18 +110,82 @@ class LinkedInPlatform(BasePlatform):
 
         # Check for 2FA / security challenge
         if "/checkpoint/" in page.url or "/challenge/" in page.url:
-            logger.warning(
-                "LinkedIn security check detected. "
-                "Please complete it manually in the browser window."
-            )
-            # Wait up to 90s for user to complete challenge
-            try:
-                await page.wait_for_url("**/feed**", timeout=90000)
-            except PWTimeout:
-                logger.error("Timed out waiting for LinkedIn security check.")
+            passed = await self._handle_2fa(page, browser_manager)
+            if not passed:
                 return False
 
         return await self._is_logged_in(page)
+
+    # ------------------------------------------------------------------
+    # 2FA / security-challenge handling
+    # ------------------------------------------------------------------
+
+    async def _handle_2fa(self, page: Page, browser_manager=None) -> bool:
+        """Wait for the user to complete a LinkedIn 2FA / security challenge.
+
+        Returns True if the challenge was completed successfully.
+        """
+        is_headless = getattr(browser_manager, "headless", False) if browser_manager else False
+        timeout = cfg.TWO_FA_TIMEOUT_SECONDS
+
+        if is_headless:
+            logger.error(
+                "LinkedIn 2FA/security check detected, but the browser is "
+                "running in HEADLESS mode — you cannot complete it without a "
+                "visible browser window.\n"
+                "  → Run the bot once with headless=false to complete 2FA.\n"
+                "  → After that, cookies will be saved and headless mode will "
+                "work for subsequent runs."
+            )
+            self.last_login_failure_reason = "2fa_headless"
+            return False
+
+        logger.warning(
+            "LinkedIn 2FA / security check detected.\n"
+            "  → Please complete the verification in the browser window.\n"
+            "  → You have {} seconds to finish. The bot will wait.",
+            timeout,
+        )
+
+        for attempt in range(1, _2FA_MAX_RETRIES + 1):
+            remaining = timeout
+            while remaining > 0:
+                try:
+                    await page.wait_for_url(
+                        "**/feed**", timeout=_2FA_POLL_INTERVAL * 1000
+                    )
+                    # Success — user completed the challenge
+                    logger.info(
+                        "2FA completed successfully. Cookies will be saved so "
+                        "future logins should not require 2FA again."
+                    )
+                    return True
+                except PWTimeout:
+                    remaining -= _2FA_POLL_INTERVAL
+                    if remaining > 0:
+                        logger.info(
+                            "2FA: waiting… {}s remaining. Complete the "
+                            "verification in the browser window.",
+                            remaining,
+                        )
+
+            # Timed out on this attempt
+            if attempt < _2FA_MAX_RETRIES:
+                logger.warning(
+                    "2FA timed out (attempt {}/{}). Retrying wait…",
+                    attempt, _2FA_MAX_RETRIES,
+                )
+            else:
+                logger.error(
+                    "Timed out waiting for LinkedIn 2FA after {} attempts "
+                    "({}s each). Skipping LinkedIn for this run.\n"
+                    "  Tip: If you keep seeing this, log into LinkedIn manually "
+                    "in your normal browser first to mark your device as trusted.",
+                    _2FA_MAX_RETRIES, timeout,
+                )
+
+        self.last_login_failure_reason = "2fa_timeout"
+        return False
 
     async def search_jobs(self, page: Page, preferences: dict[str, Any]) -> list[JobListing]:
         """Search LinkedIn for jobs matching work_preferences.yaml content."""

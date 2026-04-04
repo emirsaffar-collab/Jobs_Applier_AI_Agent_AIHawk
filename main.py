@@ -199,25 +199,37 @@ class ConfigValidator:
         deployments to configure secrets via env vars alone.
         """
         import config as cfg
+        from src.utils.llm_providers import get_provider_info
 
         # Prefer env var when set (Railway / Docker deployments)
         if cfg.LLM_API_KEY:
             return cfg.LLM_API_KEY
+
+        provider = get_provider_info(cfg.LLM_MODEL_TYPE)
+        key_hint = (
+            f"\n  Get your {provider['name']} API key at: {provider['dashboard_url']}"
+            if provider.get("dashboard_url")
+            else ""
+        )
 
         # Fall back to secrets.yaml
         try:
             secrets = ConfigValidator.load_yaml(secrets_yaml_path)
         except ConfigError:
             raise ConfigError(
-                f"LLM API key not found. Set the LLM_API_KEY environment variable "
-                f"or provide it in {secrets_yaml_path}"
+                f"LLM API key not found.{key_hint}\n"
+                f"  Then either:\n"
+                f"    - Set the LLM_API_KEY environment variable, or\n"
+                f"    - Add 'llm_api_key: <your-key>' to {secrets_yaml_path}"
             )
 
         api_key = secrets.get("llm_api_key", "")
         if not api_key:
             raise ConfigError(
-                f"LLM API key is empty. Set the LLM_API_KEY environment variable "
-                f"or provide 'llm_api_key' in {secrets_yaml_path}"
+                f"LLM API key is empty.{key_hint}\n"
+                f"  Then either:\n"
+                f"    - Set the LLM_API_KEY environment variable, or\n"
+                f"    - Add 'llm_api_key: <your-key>' to {secrets_yaml_path}"
             )
 
         return api_key
@@ -237,6 +249,7 @@ class FileManager:
         # Auto-create missing files from data_folder_example/ templates
         example_folder = Path("data_folder_example")
         missing_files = [file for file in FileManager.REQUIRED_FILES if not (app_data_folder / file).exists()]
+        created_from_template = []
         if missing_files and example_folder.is_dir():
             import shutil
             still_missing = []
@@ -244,10 +257,37 @@ class FileManager:
                 src = example_folder / file
                 if src.exists():
                     shutil.copy2(src, app_data_folder / file)
+                    created_from_template.append(file)
                     logger.warning(f"Created {app_data_folder / file} from template — please edit with your details.")
                 else:
                     still_missing.append(file)
             missing_files = still_missing
+
+        # First-run banner when template files were just created
+        if created_from_template:
+            logger.info(
+                "\n"
+                "====================================================\n"
+                "  AIHawk Jobs Applier — First-Run Setup\n"
+                "====================================================\n"
+                "  Template files were created in data_folder/.\n"
+                "  Complete these steps before running again:\n"
+                "\n"
+                "  1. Add your LLM API key:\n"
+                "     → Edit data_folder/secrets.yaml, or\n"
+                "     → Set the LLM_API_KEY environment variable\n"
+                "\n"
+                "  2. Add platform credentials (LinkedIn, etc.):\n"
+                "     → Edit data_folder/credentials.yaml, or\n"
+                "     → Set LINKEDIN_EMAIL / LINKEDIN_PASSWORD env vars\n"
+                "\n"
+                "  3. Customize your job search preferences:\n"
+                "     → Edit data_folder/work_preferences.yaml\n"
+                "\n"
+                "  For the web UI (guided setup), run:\n"
+                "     python main.py web\n"
+                "===================================================="
+            )
 
         if missing_files:
             raise FileNotFoundError(f"Missing files in data folder: {', '.join(missing_files)}")

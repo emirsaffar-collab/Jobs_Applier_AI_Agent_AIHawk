@@ -247,7 +247,22 @@ class BotManager:
                     await browser.load_cookies(platform_name)
                     logged_in = await platform.login(page, creds, browser)
                     if not logged_in:
-                        self._log(f"Login failed for {platform_name}, skipping.")
+                        reason = getattr(platform, "last_login_failure_reason", "")
+                        if reason == "2fa_headless":
+                            self._log(
+                                f"Login failed for {platform_name}: 2FA detected in headless mode. "
+                                "Run the bot once with 'Headless Browser' unchecked to complete "
+                                "2FA manually. After that, cookies will be saved and headless "
+                                "mode will work."
+                            )
+                        elif reason == "2fa_timeout":
+                            self._log(
+                                f"Login failed for {platform_name}: 2FA timed out. "
+                                "Try logging into LinkedIn in your normal browser first "
+                                "to mark your device as trusted, then run the bot again."
+                            )
+                        else:
+                            self._log(f"Login failed for {platform_name}, skipping.")
                         await page.close()
                         continue
                     await browser.save_cookies(platform_name)
