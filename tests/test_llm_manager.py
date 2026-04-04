@@ -6,7 +6,7 @@ from src.libs.llm_manager import AIAdapter, LoggerChatModel
 
 
 class TestAIAdapter:
-    @patch("src.libs.llm_manager.cfg")
+    @patch("src.libs.llm.models.cfg")
     def test_unsupported_model_raises(self, mock_cfg):
         mock_cfg.LLM_MODEL_TYPE = "unsupported_model"
         mock_cfg.LLM_MODEL = "fake"
@@ -40,7 +40,7 @@ class TestLoggerChatModel:
 
         lcm = LoggerChatModel(mock_llm)
         # Patch log_request to avoid file I/O
-        with patch("src.libs.llm_manager.LLMLogger.log_request"):
+        with patch("src.libs.llm.chat_model.LLMLogger.log_request"):
             result = lcm(messages=[{"role": "user", "content": "test"}])
 
         assert result == mock_reply
